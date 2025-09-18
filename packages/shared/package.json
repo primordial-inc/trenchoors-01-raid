@@ -1,0 +1,13 @@
+{
+  "name": "@pumpfun-game/shared",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "packageManager": "yarn@4.10.0",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
