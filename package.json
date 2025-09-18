@@ -1,0 +1,7 @@
+{
+  "name": "pumpfun-game-project",
+  "packageManager": "yarn@4.10.0",
+  "workspaces": [
+    "packages/*"
+  ]
+}
