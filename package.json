@@ -3,5 +3,8 @@
   "packageManager": "yarn@4.10.0",
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "socket.io-client": "^4.8.1"
+  }
 }
