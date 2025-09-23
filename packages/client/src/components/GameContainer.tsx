@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useGameState } from '../hooks/useGameState';
 import { assetManager } from '../assets/AssetManager';
 import { GameCanvas } from './GameCanvas';
@@ -33,6 +33,16 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     useMockData,
     setUseMockData
   } = useGameState(config.serverUrl || 'ws://localhost:3000');
+
+  // 🔧 FIX: Memoize the error handler to prevent unnecessary re-renders
+  const handleRenderingError = useCallback((error: Error) => {
+    onError?.({
+      type: 'rendering',
+      message: error.message,
+      details: error.stack,
+      timestamp: new Date()
+    });
+  }, [onError]);
 
   // Convert server game state to client game state
   const clientGameState = gameState ? {
@@ -169,12 +179,7 @@ export const GameContainer: React.FC<GameContainerProps> = ({
             <GameCanvas
               gameState={clientGameState}
               config={renderConfig}
-              onError={(error) => onError?.({
-                type: 'rendering',
-                message: error.message,
-                details: error.stack,
-                timestamp: new Date()
-              })}
+              onError={handleRenderingError} 
             />
           </div>
 

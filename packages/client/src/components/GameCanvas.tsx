@@ -14,10 +14,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onError
 }) => {
   const rendererRef = useRef<GameRenderer | null>(null);
+  const errorCallbackRef = useRef(onError);
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // Callback ref to handle canvas mounting
+  // Update error callback ref when it changes
+  useEffect(() => {
+    errorCallbackRef.current = onError;
+  }, [onError]);
+
+  // 🔧 FIX: Remove onError from dependencies to prevent unnecessary re-renders
   const canvasCallbackRef = useCallback((node: HTMLDivElement | null) => {
     console.log('🎮 Callback ref triggered with node:', node);
     if (node && !rendererRef.current) {
@@ -25,10 +31,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       initializeRenderer(node);
     } else if (!node) {
       console.log('🎮 Canvas element unmounted');
+      // Clean up renderer when unmounting
+      if (rendererRef.current) {
+        console.log('🎮 Cleaning up renderer due to unmount...');
+        rendererRef.current.destroy();
+        rendererRef.current = null;
+        setIsInitialized(false);
+      }
     } else if (rendererRef.current) {
       console.log('🎮 Renderer already exists, skipping initialization');
     }
-  }, [config, onError]);
+  }, [config]); // 🔧 FIX: Only depend on config
 
   const initializeRenderer = async (canvasElement: HTMLDivElement) => {
     try {
@@ -47,7 +60,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       });
 
       console.log('🎮 GameRenderer created successfully');
-      console.log('🎮 Getting canvas element...');
       const canvas = await renderer.getCanvas();
       console.log('🎮 Canvas element:', canvas);
 
@@ -73,16 +85,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       console.error('🎮 ❌ Failed to initialize game renderer:', err);
       const error = err instanceof Error ? err : new Error('Failed to initialize renderer');
       setError(error);
-      onError?.(error);
+      errorCallbackRef.current?.(error);
     }
   };
 
-  // Fallback initialization if callback ref doesn't work
+  // 🔧 FIX: Improved fallback initialization with better error handling
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (!rendererRef.current && !isInitialized) {
+      if (!rendererRef.current && !isInitialized && !error) {
         console.log('🎮 Fallback: Attempting to initialize renderer...');
-        // Try to find the canvas element in the DOM
         const canvasElement = document.querySelector('.game-canvas') as HTMLDivElement;
         if (canvasElement) {
           console.log('🎮 Fallback: Found canvas element, initializing...');
@@ -94,13 +105,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }, 100);
 
     return () => clearTimeout(timeoutId);
-  }, [config, onError]);
+  }, [config, isInitialized, error]); // 🔧 FIX: Better dependencies
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (rendererRef.current) {
-        console.log('🎮 Cleaning up renderer...');
+        console.log('🎮 Cleaning up renderer on unmount...');
         rendererRef.current.destroy();
         rendererRef.current = null;
         setIsInitialized(false);
@@ -122,7 +133,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       rendererRef.current.updateGameState(gameState).catch((err) => {
         const error = err instanceof Error ? err : new Error('Failed to update game state');
         setError(error);
-        onError?.(error);
+        errorCallbackRef.current?.(error);
         console.error('🎮 ❌ Failed to update game state:', error);
       });
     } else {
@@ -132,7 +143,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 !isInitialized ? 'Not initialized' : 'Unknown'
       });
     }
-  }, [gameState, isInitialized, onError]);
+  }, [gameState, isInitialized]);
 
   // Handle window resize
   useEffect(() => {
@@ -153,8 +164,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       <div className="canvas-error">
         <h3>Rendering Error</h3>
         <p>{error.message}</p>
-        <button onClick={() => window.location.reload()}>
-          Reload Game
+        <button onClick={() => {
+          setError(null);
+          setIsInitialized(false);
+          if (rendererRef.current) {
+            rendererRef.current.destroy();
+            rendererRef.current = null;
+          }
+          // Trigger re-initialization
+          const canvasElement = document.querySelector('.game-canvas') as HTMLDivElement;
+          if (canvasElement) {
+            initializeRenderer(canvasElement);
+          }
+        }}>
+          Retry
         </button>
       </div>
     );

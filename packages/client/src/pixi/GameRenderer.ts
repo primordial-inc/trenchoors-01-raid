@@ -25,6 +25,7 @@ export class GameRenderer {
 	private app: Application;
 	private config: RendererConfig;
 	private gridConfig: GridConfig;
+	private isAppInitialized: boolean = false; // 🔧 FIX: Track initialization state
 
 	// Container layers for organized rendering
 	private terrainLayer!: Container;
@@ -63,14 +64,9 @@ export class GameRenderer {
 		};
 
 		console.log('🎮 Creating PIXI Application...');
-		console.log('🎮 Application class:', Application);
-		console.log('🎮 Application type:', typeof Application);
-		console.log('🎮 Application constructor:', Application?.constructor?.name);
-		console.log('🎮 PIXI.Application:', PIXI.Application);
-		console.log('🎮 PIXI.Application type:', typeof PIXI.Application);
 
 		try {
-			// Create empty PIXI Application (v8 approach)
+			// 🔧 FIX: Create PIXI Application (v8 approach)
 			console.log('🎮 Calling new Application()...');
 			this.app = new Application();
 			console.log('🎮 PIXI Application created successfully');
@@ -85,24 +81,15 @@ export class GameRenderer {
 			try {
 				this.app = new PIXI.Application();
 				console.log('🎮 PIXI Application created successfully with fallback');
-				console.log('🎮 Created app:', this.app);
-				console.log('🎮 App type:', typeof this.app);
 			} catch (fallbackError) {
 				console.error('🎮 ❌ Failed to create PIXI Application with fallback:', fallbackError);
-				console.error('🎮 Error details:', {
-					message: error instanceof Error ? error.message : 'Unknown error',
-					stack: error instanceof Error ? error.stack : undefined,
-					errorType: typeof error,
-					Application: Application,
-					PIXIApplication: PIXI.Application
-				});
 				throw new Error(`Failed to create PIXI Application: ${error instanceof Error ? error.message : 'Unknown error'}`);
 			}
 		}
 
+		// 🔧 FIX: Validate app creation
 		if (!this.app) {
 			console.error('🎮 ❌ PIXI Application is null/undefined');
-			console.error('🎮 This should not happen if Application creation succeeded');
 			throw new Error('PIXI Application creation returned null/undefined');
 		}
 		
@@ -113,46 +100,50 @@ export class GameRenderer {
 			appStage: !!this.app?.stage
 		});
 
-    console.log('🎮 PIXI Application created:', {
-      hasApp: !!this.app,
-      appType: typeof this.app,
-      appConstructor: this.app?.constructor?.name
-    });
-
-		// Note: App will be initialized when getCanvas() is called
-		// Layers will be created after app initialization
+		console.log('🎮 PIXI Application created successfully - ready for initialization');
 	}
 
 	/**
 	 * Initialize PIXI Application
 	 */
 	private async initializeApp(): Promise<void> {
+		// 🔧 FIX: Don't re-initialize if already done
+		if (this.isAppInitialized) {
+			console.log('🎮 App already initialized, skipping...');
+			return;
+		}
+
 		try {
 			console.log('🎮 Initializing PIXI Application...');
-			console.log('🎮 Config:', {
-				width: this.config.canvasWidth,
-				height: this.config.canvasHeight,
-				backgroundColor: this.config.backgroundColor || 0x2C3E50,
-				antialias: this.config.antialias || true,
-				resolution: this.config.resolution || window.devicePixelRatio || 1,
-				autoDensity: true
-			});
+			
+			// 🔧 FIX: Validate app exists before initialization
+			if (!this.app) {
+				throw new Error('PIXI Application is null/undefined before initialization');
+			}
 
-			await this.app.init({
+			const initConfig = {
 				width: this.config.canvasWidth,
 				height: this.config.canvasHeight,
 				backgroundColor: this.config.backgroundColor || 0x2C3E50,
-				antialias: this.config.antialias || true,
+				antialias: this.config.antialias !== false,
 				resolution: this.config.resolution || window.devicePixelRatio || 1,
 				autoDensity: true
-			});
+			};
+
+			console.log('🎮 Init config:', initConfig);
+
+			await this.app.init(initConfig);
 
 			console.log('🎮 ✅ PIXI Application initialized successfully');
 			console.log('🎮 App state after init:', {
 				hasCanvas: !!this.app.canvas,
 				canvasWidth: this.app.canvas?.width,
-				canvasHeight: this.app.canvas?.height
+				canvasHeight: this.app.canvas?.height,
+				hasStage: !!this.app.stage,
+				stageChildren: this.app.stage?.children?.length || 0
 			});
+
+			this.isAppInitialized = true;
 
 			// Now that the app is initialized, create the layers
 			this.createLayers();
@@ -232,8 +223,6 @@ export class GameRenderer {
 			if (frameCount % 60 === 0) {
 				this.performanceStats.fps = Math.round(1000 / deltaTime);
 				this.performanceStats.frameTime = deltaTime;
-				// Note: drawCalls is not available in newer PIXI versions
-				// this.performanceStats.drawCalls = this.app.renderer.gl.drawCalls || 0;
 				this.performanceStats.sprites = this.app.stage.children.length;
 
 				// Update FPS display
@@ -340,46 +329,52 @@ export class GameRenderer {
 		return this.app;
 	}
 
-  /**
-   * Get canvas element
-   */
-  async getCanvas(): Promise<HTMLCanvasElement> {
-    console.log('🎮 Getting canvas element...');
-    console.log('🎮 App state:', {
-      hasApp: !!this.app,
-      hasCanvas: this.app ? !!this.app.canvas : false
-    });
-    console.log('🎮 this.app:', this.app);
-    console.log('🎮 this.app type:', typeof this.app);
-    
-    // Ensure app is initialized before returning canvas
-    if (!this.app) {
-      console.error('🎮 ❌ PIXI Application is null/undefined in getCanvas()');
-      throw new Error('PIXI Application not created');
-    }
-    
-    // Always initialize the app to ensure canvas is available
-    if (!this.app.canvas) {
-      console.log('🎮 Canvas not available, initializing app...');
-      await this.initializeApp();
-    }
-    
-    if (!this.app.canvas) {
-      console.error('🎮 ❌ Canvas still not available after initialization');
-      throw new Error('Failed to initialize PIXI Application canvas');
-    }
-    
-    // Create layers if not already created
-    if (!this.terrainLayer) {
-      console.log('🎮 Creating layers...');
-      this.createLayers();
-      this.setupPerformanceMonitoring();
-      this.setupFPSDisplay();
-    }
-    
-    console.log('🎮 Canvas element retrieved successfully');
-    return this.app.canvas;
-  }
+	/**
+	 * Get canvas element
+	 */
+	async getCanvas(): Promise<HTMLCanvasElement> {
+		console.log('🎮 Getting canvas element...');
+		
+		// 🔧 FIX: Validate app exists
+		if (!this.app) {
+			console.error('🎮 ❌ PIXI Application is null/undefined in getCanvas()');
+			throw new Error('PIXI Application not created');
+		}
+
+		// console.log('🎮 App state before canvas access:', {
+		// 	hasApp: !!this.app,
+		// 	isInitialized: this.isAppInitialized,
+		// 	hasCanvas: this.app ? !!this.app.canvas : false
+		// });
+		
+		// 🔧 FIX: Initialize app if not already done
+		if (!this.isAppInitialized) {
+			console.log('🎮 App not initialized, initializing now...');
+			await this.initializeApp();
+		}
+		
+		// 🔧 FIX: Validate canvas exists after initialization
+		if (!this.app.canvas) {
+			console.error('🎮 ❌ Canvas still not available after initialization');
+			console.error('🎮 App state:', {
+				app: this.app,
+				isInitialized: this.isAppInitialized,
+				appType: typeof this.app,
+				hasCanvas: !!this.app.canvas
+			});
+			throw new Error('Failed to initialize PIXI Application canvas');
+		}
+		
+		console.log('🎮 ✅ Canvas element retrieved successfully');
+		console.log('🎮 Canvas details:', {
+			width: this.app.canvas.width,
+			height: this.app.canvas.height,
+			clientWidth: this.app.canvas.clientWidth,
+			clientHeight: this.app.canvas.clientHeight
+		});
+		
+		return this.app.canvas;
+	}
 
 	/**
 	 * Get performance stats
@@ -394,13 +389,20 @@ export class GameRenderer {
 	async updateGameState(gameState: GameState): Promise<void> {
 		console.log('🎮 Updating game state:', gameState);
 		console.log('🎮 Current renderer state:', {
-			appInitialized: !!this.app,
+			appInitialized: this.isAppInitialized,
 			canvasAttached: !!this.app?.canvas?.parentElement,
 			stageChildren: this.app?.stage?.children?.length || 0,
 			terrainInitialized: this.terrainInitialized
 		});
 
 		this.currentGameState = gameState;
+		
+		// 🔧 FIX: Ensure app is initialized before rendering
+		if (!this.isAppInitialized) {
+			console.log('🎮 App not initialized for game state update, initializing...');
+			await this.initializeApp();
+		}
+		
 		await this.renderGameState();
 	}
 
@@ -679,16 +681,18 @@ export class GameRenderer {
 	 * Resize renderer
 	 */
 	resize(width: number, height: number): void {
-		this.app.renderer.resize(width, height);
-		this.gridConfig = {
-			...this.gridConfig,
-			canvasWidth: width,
-			canvasHeight: height
-		};
+		if (this.isAppInitialized && this.app.renderer) {
+			this.app.renderer.resize(width, height);
+			this.gridConfig = {
+				...this.gridConfig,
+				canvasWidth: width,
+				canvasHeight: height
+			};
 
-		// Re-render with new dimensions
-		if (this.currentGameState) {
-			this.renderGameState();
+			// Re-render with new dimensions
+			if (this.currentGameState) {
+				this.renderGameState();
+			}
 		}
 	}
 
@@ -696,6 +700,8 @@ export class GameRenderer {
 	 * Destroy renderer and cleanup
 	 */
 	destroy(): void {
+		console.log('🎮 Destroying GameRenderer...');
+		
 		// Cleanup sprites
 		this.playerSprites.forEach(sprite => sprite.destroy());
 		this.playerSprites.clear();
@@ -712,7 +718,12 @@ export class GameRenderer {
 		this.mechanicSprites = [];
 
 		// Destroy PIXI app
-		this.app.destroy(true);
+		if (this.app) {
+			this.app.destroy(true);
+		}
+
+		this.isAppInitialized = false;
+		console.log('🎮 GameRenderer destroyed');
 	}
 
 	/**
