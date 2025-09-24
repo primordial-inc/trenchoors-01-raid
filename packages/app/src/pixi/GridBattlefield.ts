@@ -5,6 +5,8 @@ import { SpriteSheetManager } from '../assets/SpriteSheetManager';
 import { TerrainManager, type TerrainPattern } from './TerrainManager';
 import { SpriteEntityManager } from './SpriteEntityManager';
 import { SpriteAnimationController } from './SpriteAnimationController';
+import { AnimationStateManager } from './AnimationStateManager';
+import { MovementTweener } from './MovementTweener';
 
 export class GridBattlefield {
   private app: PIXI.Application;
@@ -29,6 +31,8 @@ export class GridBattlefield {
 
   // Entity sprite system
   private spriteEntityManager: SpriteEntityManager;
+  private animationStateManager: AnimationStateManager;
+  private movementTweener: MovementTweener;
 
   // Entity layers
   private playerLayer: PIXI.Container;
@@ -74,7 +78,12 @@ export class GridBattlefield {
     // Initialize sprite and terrain managers
     this.spriteManager = new SpriteSheetManager();
     this.terrainManager = new TerrainManager(this.spriteManager);
-    this.spriteEntityManager = new SpriteEntityManager(this.spriteManager, new SpriteAnimationController());
+    
+    // Initialize animation systems
+    const animationController = new SpriteAnimationController();
+    this.spriteEntityManager = new SpriteEntityManager(this.spriteManager, animationController);
+    this.animationStateManager = new AnimationStateManager(animationController);
+    this.movementTweener = new MovementTweener();
 
     // Create visual elements
     this.background = new PIXI.Graphics();
@@ -562,6 +571,9 @@ export class GridBattlefield {
       this.players.set(id, playerSprite);
       this.playerLabels.set(id, label);
 
+      // Initialize animation state
+      this.animationStateManager.initializeEntity(id, 'player', position);
+
       // Add to stage
       this.playerLayer.addChild(playerSprite);
       this.uiLayer.addChild(label);
@@ -606,6 +618,96 @@ export class GridBattlefield {
   }
 
   /**
+   * Move player with smooth animation
+   */
+  async movePlayerSmooth(id: string, newPosition: GridPosition): Promise<void> {
+    console.log(`🎬 movePlayerSmooth called for ${id} to position (${newPosition.x}, ${newPosition.y})`);
+    
+    const player = this.players.get(id);
+    const label = this.playerLabels.get(id);
+    
+    if (!player || !label) {
+      console.warn(`Player not found for smooth movement: ${id}`);
+      return;
+    }
+
+    // Get current position
+    const currentPosition = this.screenToGrid(player.x, player.y);
+    if (!currentPosition) {
+      console.warn(`Could not determine current position for player: ${id}`);
+      return;
+    }
+
+    console.log(`🎬 Current position: (${currentPosition.x}, ${currentPosition.y}), Target: (${newPosition.x}, ${newPosition.y})`);
+
+    // Start movement animation
+    this.animationStateManager.startMoving(id, newPosition);
+
+    try {
+      // Perform smooth movement
+      await this.movementTweener.moveEntity(id, player, currentPosition, newPosition, undefined, this.cellSize);
+      
+      // Update label position
+      const screenPos = this.gridToScreen(newPosition);
+      label.x = screenPos.x;
+      label.y = screenPos.y + this.cellSize * 0.4;
+      
+      // Finish movement animation
+      this.animationStateManager.finishMoving(id);
+      
+      console.log(`✅ Completed smooth movement for player: ${id}`);
+    } catch (error) {
+      console.error(`❌ Smooth movement failed for player: ${id}`, error);
+      // Fallback to instant movement
+      this.updatePlayerPosition(id, newPosition);
+      this.animationStateManager.finishMoving(id);
+    }
+  }
+
+  /**
+   * Trigger player attack animation
+   */
+  triggerPlayerAttack(id: string): void {
+    console.log(`⚔️ triggerPlayerAttack called for ${id}`);
+    this.animationStateManager.triggerAttack(id);
+  }
+
+  /**
+   * Set player as dead
+   */
+  setPlayerDead(id: string): void {
+    this.animationStateManager.setEntityDead(id);
+  }
+
+  /**
+   * Set player as alive
+   */
+  setPlayerAlive(id: string): void {
+    this.animationStateManager.setEntityAlive(id);
+  }
+
+  /**
+   * Trigger boss attack animation
+   */
+  triggerBossAttack(): void {
+    this.animationStateManager.triggerAttack('boss');
+  }
+
+  /**
+   * Set boss as dead
+   */
+  setBossDead(): void {
+    this.animationStateManager.setEntityDead('boss');
+  }
+
+  /**
+   * Set boss as alive
+   */
+  setBossAlive(): void {
+    this.animationStateManager.setEntityAlive('boss');
+  }
+
+  /**
    * Update player state (alive/dead)
    */
   updatePlayerState(id: string, isAlive: boolean, _damage: number, _deaths: number): void {
@@ -644,6 +746,10 @@ export class GridBattlefield {
       this.uiLayer.removeChild(label);
       this.playerLabels.delete(id);
     }
+
+    // Clean up animation state
+    this.animationStateManager.removeEntity(id);
+    this.movementTweener.stopTween(id);
 
     this.render();
   }
@@ -697,6 +803,9 @@ export class GridBattlefield {
 
       // Store reference
       this.boss = bossSprite;
+
+      // Initialize animation state
+      this.animationStateManager.initializeEntity('boss', 'boss', position);
 
       // Add to stage
       this.bossLayer.addChild(bossSprite);
@@ -784,6 +893,11 @@ export class GridBattlefield {
       this.uiLayer.removeChild(this.bossLabel);
       this.bossLabel = null;
     }
+
+    // Clean up animation state
+    this.animationStateManager.removeEntity('boss');
+    this.movementTweener.stopTween('boss');
+
     this.render();
   }
 
@@ -821,6 +935,13 @@ export class GridBattlefield {
     }
   }
 
+
+  /**
+   * Get all player IDs
+   */
+  getPlayerIds(): string[] {
+    return Array.from(this.players.keys());
+  }
 
   /**
    * Get entity at position
@@ -910,6 +1031,15 @@ export class GridBattlefield {
       // Clean up sprite entity resources
       if (this.spriteEntityManager) {
         this.spriteEntityManager.destroy();
+      }
+      
+      // Clean up animation systems
+      if (this.animationStateManager) {
+        this.animationStateManager.destroy();
+      }
+      
+      if (this.movementTweener) {
+        this.movementTweener.destroy();
       }
       
       if (this.spriteManager) {

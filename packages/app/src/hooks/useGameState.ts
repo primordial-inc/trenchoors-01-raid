@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { GameState, ConnectionStatus } from '../types/GameTypes';
+import type { GridBattlefield } from '../pixi/GridBattlefield';
 
 interface UseGameStateReturn {
   gameState: GameState | null;
@@ -8,6 +9,7 @@ interface UseGameStateReturn {
   error: string | null;
   connect: () => void;
   disconnect: () => void;
+  setBattlefieldRef: (battlefield: GridBattlefield | null) => void;
 }
 
 export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGameStateReturn {
@@ -15,6 +17,7 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const battlefieldRef = useRef<GridBattlefield | null>(null);
 
   const connect = () => {
     if (socketRef.current?.connected) {
@@ -98,6 +101,8 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
 
       socket.on('playerMoved', (playerId: string, position: any) => {
         console.log('🚶 Player moved:', playerId, position);
+        console.log('🎬 Battlefield ref available:', !!battlefieldRef.current);
+        
         // Update player position in current state
         setGameState(prev => {
           if (!prev) return prev;
@@ -110,10 +115,19 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
             )
           };
         });
+        
+        // 🎬 NEW: Trigger smooth movement animation
+        if (battlefieldRef.current) {
+          console.log('🎬 Calling movePlayerSmooth...');
+          battlefieldRef.current.movePlayerSmooth(playerId, { x: position.x, y: position.y });
+        } else {
+          console.warn('🎬 Battlefield ref not available for animation');
+        }
       });
 
       socket.on('playerDied', (playerId: string) => {
         console.log('💀 Player died:', playerId);
+        
         // Update player state in current state
         setGameState(prev => {
           if (!prev) return prev;
@@ -126,6 +140,48 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
             )
           };
         });
+        
+        // 🎬 NEW: Trigger death animation
+        if (battlefieldRef.current) {
+          battlefieldRef.current.setPlayerDead(playerId);
+        }
+      });
+
+      // 🎬 NEW: Player attack event
+      socket.on('playerAttacked', (playerId: string, target: any) => {
+        console.log('⚔️ Player attacked:', playerId, target);
+        console.log('🎬 Battlefield ref available for attack:', !!battlefieldRef.current);
+        
+        // 🎬 NEW: Trigger attack animation
+        if (battlefieldRef.current) {
+          console.log('🎬 Calling triggerPlayerAttack...');
+          battlefieldRef.current.triggerPlayerAttack(playerId);
+        } else {
+          console.warn('🎬 Battlefield ref not available for attack animation');
+        }
+      });
+
+      // 🎬 NEW: Player respawned event
+      socket.on('playerRespawned', (playerId: string) => {
+        console.log('❤️ Player respawned:', playerId);
+        
+        // Update player state in current state
+        setGameState(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            players: prev.players.map(p => 
+              p.id === playerId 
+                ? { ...p, isAlive: true }
+                : p
+            )
+          };
+        });
+        
+        // 🎬 NEW: Trigger alive animation
+        if (battlefieldRef.current) {
+          battlefieldRef.current.setPlayerAlive(playerId);
+        }
       });
 
       // Boss events
@@ -153,6 +209,11 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
             isAlive: newHealth > 0
           }
         } : prev);
+        
+        // 🎬 NEW: Trigger boss attack animation (when taking damage)
+        if (battlefieldRef.current) {
+          battlefieldRef.current.triggerBossAttack();
+        }
       });
 
       socket.on('bossDied', () => {
@@ -165,6 +226,11 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
             currentHealth: 0
           }
         } : prev);
+        
+        // 🎬 NEW: Trigger boss death animation
+        if (battlefieldRef.current) {
+          battlefieldRef.current.setBossDead();
+        }
       });
 
       // Game events
@@ -210,6 +276,11 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
     setError(null);
   };
 
+  const setBattlefieldRef = (battlefield: GridBattlefield | null) => {
+    battlefieldRef.current = battlefield;
+    console.log('🎬 Battlefield reference set for animation triggers');
+  };
+
   // Auto-connect on mount
   useEffect(() => {
     connect();
@@ -238,6 +309,7 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
     connectionStatus,
     error,
     connect,
-    disconnect
+    disconnect,
+    setBattlefieldRef
   };
 }

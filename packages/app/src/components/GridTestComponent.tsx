@@ -27,7 +27,7 @@ export const GridTestComponent: React.FC = () => {
   const [spriteLoadingStatus, setSpriteLoadingStatus] = useState<string>('Loading sprites...');
   
   // Server connection
-  const { gameState, connectionStatus, error } = useGameState();
+  const { gameState, connectionStatus, error, setBattlefieldRef } = useGameState();
   
   // Manual mode state
   const [, setManualPlayers] = useState<Map<string, { position: GridPosition; color: string; name: string; isAlive: boolean }>>(new Map());
@@ -171,9 +171,12 @@ export const GridTestComponent: React.FC = () => {
     }
   }, [gameState, mode]);
 
-  // Monitor sprite loading status
+  // Monitor sprite loading status and set battlefield reference
   useEffect(() => {
     if (battlefieldRef.current && isLoaded) {
+      // Set battlefield reference for animation triggers
+      setBattlefieldRef(battlefieldRef.current);
+      
       // Check if sprites are loaded
       const checkSpriteStatus = () => {
         // For now, assume sprites are loaded after battlefield initialization
@@ -186,7 +189,7 @@ export const GridTestComponent: React.FC = () => {
       const timer = setTimeout(checkSpriteStatus, 1000);
       return () => clearTimeout(timer);
     }
-  }, [isLoaded]);
+  }, [isLoaded, setBattlefieldRef]);
 
   // Terrain control functions
   const regenerateTerrain = useCallback(async () => {
@@ -434,6 +437,24 @@ export const GridTestComponent: React.FC = () => {
                 </button>
                 <button onClick={clearAllEntities} style={{ padding: '8px 16px', backgroundColor: '#95a5a6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                   🗑️ Clear All
+                </button>
+                <button 
+                  onClick={() => {
+                    // Test animation system
+                    if (battlefieldRef.current) {
+                      const playerIds = battlefieldRef.current.getPlayerIds();
+                      if (playerIds.length > 0) {
+                        const playerId = playerIds[0];
+                        console.log('🧪 Testing attack animation for:', playerId);
+                        battlefieldRef.current.triggerPlayerAttack(playerId);
+                      } else {
+                        console.log('🧪 No players found to test animation');
+                      }
+                    }
+                  }}
+                  style={{ padding: '8px 16px', backgroundColor: '#9b59b6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  🧪 Test Attack
                 </button>
               </div>
             </div>
