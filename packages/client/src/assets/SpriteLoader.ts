@@ -187,12 +187,37 @@ export class SpriteLoader {
    * @returns Fallback texture
    */
   createFallbackTexture(width: number = 32, height: number = 32, color: number = 0xFF0000): PIXI.Texture {
+    console.log(`🎨 Creating fallback texture: ${width}x${height}, color: 0x${color.toString(16)}`);
+    
     const graphics = new PIXI.Graphics();
     graphics.beginFill(color);
     graphics.drawRect(0, 0, width, height);
     graphics.endFill();
     
-    return PIXI.RenderTexture.create({ width, height });
+    // 🔧 FIX: Actually render the graphics to create a visible texture
+    // Note: We'll use canvas approach instead of RenderTexture for better compatibility
+    
+    // For PixiJS v8, we need to use a different approach
+    // Create a simple colored rectangle texture
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    
+    if (ctx) {
+      // Fill with color
+      ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+      ctx.fillRect(0, 0, width, height);
+      
+      // Create texture from canvas
+      const texture = PIXI.Texture.from(canvas);
+      console.log(`🎨 Fallback texture created successfully:`, texture);
+      return texture;
+    } else {
+      console.error('🎨 Failed to get canvas context for fallback texture');
+      // Return a basic texture as last resort
+      return PIXI.Texture.WHITE;
+    }
   }
 
   /**

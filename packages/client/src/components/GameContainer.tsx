@@ -101,12 +101,12 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     setIsAssetsLoaded(true);
   }, [onError]);
 
-  // Handle game state updates
+  // 🔧 FIX: Handle game state updates with stable callback
   useEffect(() => {
-    if (gameState) {
-      onGameStateUpdate?.(gameState);
+    if (gameState && onGameStateUpdate) {
+      onGameStateUpdate(gameState);
     }
-  }, [gameState, onGameStateUpdate]);
+  }, [gameState]); // Remove onGameStateUpdate from dependencies to prevent unnecessary re-renders
 
   // Handle game errors
   useEffect(() => {

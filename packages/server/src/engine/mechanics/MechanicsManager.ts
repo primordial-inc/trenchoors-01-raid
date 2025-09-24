@@ -1,7 +1,6 @@
 import { BaseBossMechanic, BossMechanic } from './BossMechanic';
 import { LavaWaveMechanic } from './LavaWave';
 import { MeteorStrikeMechanic } from './MeteorStrike';
-import { PillarPhaseMechanic } from './PillarPhase';
 import { Position, Player } from '@pumpfun-game/shared';
 
 export interface MechanicsConfig {
@@ -33,8 +32,7 @@ export class MechanicsManager {
   private initializeMechanicTypes(): void {
     this.mechanicTypes = [
       new LavaWaveMechanic(),
-      new MeteorStrikeMechanic(),
-      new PillarPhaseMechanic()
+      new MeteorStrikeMechanic()
     ];
   }
 
@@ -86,9 +84,6 @@ export class MechanicsManager {
         break;
       case 'meteor_strike':
         newMechanic = new MeteorStrikeMechanic();
-        break;
-      case 'pillar_phase':
-        newMechanic = new PillarPhaseMechanic();
         break;
       default:
         return null;

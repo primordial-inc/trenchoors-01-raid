@@ -71,6 +71,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       setIsInitialized(true);
       setError(null);
 
+      // 🔧 FIX: Expose debug tools to window for console debugging
+      (window as any).gameRenderer = renderer;
+      (window as any).debugGameRenderer = () => renderer.debugRenderer();
+      (window as any).forceRerender = () => renderer.forceRerender();
+      (window as any).forceVisibility = () => renderer.forceVisibility();
+
       console.log('🎮 ✅ Game renderer initialized successfully');
       console.log('🎮 Canvas dimensions:', {
         width: canvas.width,
@@ -81,6 +87,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       console.log('🎮 PIXI App:', renderer.getApp());
       console.log('🎮 PIXI App stage children:', renderer.getApp().stage.children.length);
       console.log('🎮 Canvas parent element:', canvas.parentElement);
+      console.log('🎮 Debug tools available: window.debugGameRenderer(), window.forceRerender(), window.forceVisibility()');
     } catch (err) {
       console.error('🎮 ❌ Failed to initialize game renderer:', err);
       const error = err instanceof Error ? err : new Error('Failed to initialize renderer');

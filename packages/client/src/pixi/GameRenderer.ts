@@ -3,7 +3,6 @@ import * as PIXI from 'pixi.js';
 import type { GameState } from '@pumpfun-game/shared';
 import { DEFAULT_GRID_CONFIG, gridToPixels, getCellSize } from '../utils/GridUtils';
 import type { GridConfig } from '../utils/GridUtils';
-import { spriteLoader } from '../assets/SpriteLoader';
 
 export interface RendererConfig {
 	canvasWidth: number;
@@ -197,7 +196,19 @@ export class GameRenderer {
 		this.effectsLayer.name = 'EffectsLayer';
 		this.uiLayer.name = 'UILayer';
 
-		console.log('🎨 Layers created successfully');
+		// 🔧 FIX: Ensure all layers are visible and have proper alpha
+		this.terrainLayer.visible = true;
+		this.terrainLayer.alpha = 1;
+		this.gameObjectLayer.visible = true;
+		this.gameObjectLayer.alpha = 1;
+		this.mechanicsLayer.visible = true;
+		this.mechanicsLayer.alpha = 1;
+		this.effectsLayer.visible = true;
+		this.effectsLayer.alpha = 1;
+		this.uiLayer.visible = true;
+		this.uiLayer.alpha = 1;
+
+		console.log('🎨 Layers created successfully with visibility settings');
 
 		// Add a test rectangle to verify PixiJS is working
 		this.addTestRectangle();
@@ -418,13 +429,11 @@ export class GameRenderer {
 		console.log('🎨 Starting game state render...');
 		console.log('🎨 Terrain initialized:', this.terrainInitialized);
 
-		// Only render terrain once
-		if (!this.terrainInitialized) {
-			console.log('🌍 Rendering terrain...');
-			await this.renderTerrain();
-			this.terrainInitialized = true;
-			console.log('🌍 Terrain rendering complete');
-		}
+		// 🔧 FIX: Always render terrain to ensure it's visible
+		console.log('🌍 Rendering terrain...');
+		await this.renderTerrain();
+		this.terrainInitialized = true;
+		console.log('🌍 Terrain rendering complete');
 
 		console.log('👹 Rendering boss...');
 		await this.renderBoss();
@@ -456,51 +465,33 @@ export class GameRenderer {
 		const cellSize = getCellSize(this.gridConfig);
 		console.log('🌍 Cell size:', cellSize);
 
-		let successCount = 0;
-		let fallbackCount = 0;
-
-		// Create terrain tiles for each grid cell
+		// 🔧 FIX: Create simple colored terrain instead of loading textures
 		for (let x = 0; x < this.gridConfig.gridWidth; x++) {
 			for (let y = 0; y < this.gridConfig.gridHeight; y++) {
 				const pixelPos = gridToPixels(x, y, this.gridConfig);
 
-				// Load terrain texture
-				try {
-					console.log(`🌍 Loading terrain for cell (${x}, ${y}) at pixel (${pixelPos.x}, ${pixelPos.y})`);
-					const terrainResult = await spriteLoader.loadSprite('terrain_tile1');
+				// Create a simple colored rectangle for each cell
+				const terrainCell = new Graphics();
+				terrainCell.beginFill(0x34495E, 0.8); // Dark blue-gray with transparency
+				terrainCell.lineStyle(1, 0x2C3E50, 0.5); // Subtle border
+				terrainCell.drawRect(
+					pixelPos.x - cellSize.width / 2,
+					pixelPos.y - cellSize.height / 2,
+					cellSize.width,
+					cellSize.height
+				);
+				terrainCell.endFill();
 
-					if (terrainResult.success && terrainResult.texture) {
-						const terrainSprite = new Sprite(terrainResult.texture);
-						terrainSprite.x = pixelPos.x - cellSize.width / 2;
-						terrainSprite.y = pixelPos.y - cellSize.height / 2;
-						terrainSprite.width = cellSize.width;
-						terrainSprite.height = cellSize.height;
+				this.terrainLayer.addChild(terrainCell);
+				this.terrainSprites.push(terrainCell as any); // Type assertion for compatibility
 
-						this.terrainLayer.addChild(terrainSprite);
-						this.terrainSprites.push(terrainSprite);
-						successCount++;
-
-						if (successCount <= 3) { // Log first few successful loads
-							console.log(`🌍 ✅ Successfully created terrain sprite at (${x}, ${y})`);
-						}
-					} else {
-						console.warn(`🌍 ❌ Failed to load terrain texture for (${x}, ${y}):`, terrainResult.error);
-						// Create a fallback colored rectangle
-						const fallbackSprite = new Graphics();
-						fallbackSprite.beginFill(0x2C3E50);
-						fallbackSprite.drawRect(pixelPos.x - cellSize.width / 2, pixelPos.y - cellSize.height / 2, cellSize.width, cellSize.height);
-						fallbackSprite.endFill();
-						this.terrainLayer.addChild(fallbackSprite);
-						fallbackCount++;
-					}
-				} catch (error) {
-					console.error(`🌍 ❌ Error loading terrain sprite for (${x}, ${y}):`, error);
-					fallbackCount++;
+				if (x < 3 && y < 3) { // Log first few cells
+					console.log(`🌍 ✅ Created terrain cell at (${x}, ${y}) pixel (${pixelPos.x}, ${pixelPos.y})`);
 				}
 			}
 		}
 
-		console.log(`🌍 Terrain rendering complete: ${successCount} successful, ${fallbackCount} fallbacks`);
+		console.log(`🌍 Terrain rendering complete: ${this.terrainLayer.children.length} cells created`);
 		console.log(`🌍 Terrain layer children count: ${this.terrainLayer.children.length}`);
 	}
 
@@ -520,52 +511,41 @@ export class GameRenderer {
 			this.bossSprite.destroy();
 			this.bossSprite = null;
 		}
-		this.gameObjectLayer.removeChildren();
 
 		const boss = this.currentGameState.boss;
 		const pixelPos = gridToPixels(boss.position.x, boss.position.y, this.gridConfig);
 		console.log('👹 Boss pixel position:', pixelPos);
 
-		// Load boss texture
-		try {
-			console.log('👹 Loading boss texture...');
-			const bossResult = await spriteLoader.loadSprite('boss_castle');
+		// 🔧 FIX: Create a distinctive fallback boss sprite
+		const cellSize = getCellSize(this.gridConfig);
+		const bossSize = Math.min(cellSize.width, cellSize.height) * 1.2; // 120% of cell size
 
-			if (bossResult.success && bossResult.texture) {
-				console.log('👹 ✅ Boss texture loaded successfully');
-				this.bossSprite = new Sprite(bossResult.texture);
-				this.bossSprite.x = pixelPos.x - this.bossSprite.width / 2;
-				this.bossSprite.y = pixelPos.y - this.bossSprite.height / 2;
+		const bossSprite = new Graphics();
+		bossSprite.beginFill(0x8E44AD); // Purple base
+		bossSprite.lineStyle(3, 0xF39C12, 1); // Gold border
+		bossSprite.drawRect(
+			pixelPos.x - bossSize / 2,
+			pixelPos.y - bossSize / 2,
+			bossSize,
+			bossSize
+		);
+		bossSprite.endFill();
 
-				// Scale boss sprite to fit cell size
-				const cellSize = getCellSize(this.gridConfig);
-				const scale = Math.min(cellSize.width / this.bossSprite.width, cellSize.height / this.bossSprite.height);
-				this.bossSprite.scale.set(scale);
+		// Add crown pattern
+		bossSprite.beginFill(0xF39C12); // Gold
+		bossSprite.drawRect(pixelPos.x - bossSize * 0.3, pixelPos.y - bossSize * 0.4, bossSize * 0.6, bossSize * 0.2);
+		bossSprite.endFill();
 
-				console.log('👹 Boss sprite created:', {
-					x: this.bossSprite.x,
-					y: this.bossSprite.y,
-					scale: scale,
-					width: this.bossSprite.width,
-					height: this.bossSprite.height
-				});
+		this.gameObjectLayer.addChild(bossSprite);
+		this.bossSprite = bossSprite as any; // Type assertion
 
-				this.gameObjectLayer.addChild(this.bossSprite);
-				console.log('👹 Boss sprite added to game object layer');
-			} else {
-				console.warn('👹 ❌ Failed to load boss texture:', bossResult.error);
-				// Create a fallback boss sprite
-				const fallbackBoss = new Graphics();
-				fallbackBoss.beginFill(0x8E44AD);
-				const cellSize = getCellSize(this.gridConfig);
-				fallbackBoss.drawRect(pixelPos.x - cellSize.width / 2, pixelPos.y - cellSize.height / 2, cellSize.width, cellSize.height);
-				fallbackBoss.endFill();
-				this.gameObjectLayer.addChild(fallbackBoss);
-				console.log('👹 Fallback boss sprite created');
-			}
-		} catch (error) {
-			console.error('👹 ❌ Error loading boss sprite:', error);
-		}
+		console.log('👹 Boss sprite created:', {
+			x: pixelPos.x,
+			y: pixelPos.y,
+			size: bossSize,
+			gridPos: boss.position
+		});
+		console.log('👹 Boss sprite added to game object layer');
 	}
 
 	/**
@@ -596,69 +576,65 @@ export class GameRenderer {
 			const pixelPos = gridToPixels(player.position.x, player.position.y, this.gridConfig);
 			console.log(`👥 Player pixel position:`, pixelPos);
 
-			// Determine sprite key based on player color
-			let spriteKey: keyof typeof import('../assets/AssetConfig').SPRITE_CONFIGS;
+			// 🔧 FIX: Create distinctive fallback player sprites
+			const cellSize = getCellSize(this.gridConfig);
+			const playerSize = Math.min(cellSize.width, cellSize.height) * 0.7; // 70% of cell size
+			const playerColor = getPlayerColor(player.color);
+
+			const playerSprite = new Graphics();
+			playerSprite.lineStyle(2, 0xFFFFFF, 1); // White border
+
+			// Create different shapes based on player color
 			switch (player.color) {
 				case 'blue':
-					spriteKey = 'player_blue_warrior';
+					playerSprite.beginFill(playerColor);
+					playerSprite.drawCircle(pixelPos.x, pixelPos.y, playerSize / 2);
 					break;
 				case 'red':
-					spriteKey = 'player_red_warrior';
+					playerSprite.beginFill(playerColor);
+					// Diamond shape
+					playerSprite.drawPolygon([
+						pixelPos.x, pixelPos.y - playerSize / 2,
+						pixelPos.x + playerSize / 2, pixelPos.y,
+						pixelPos.x, pixelPos.y + playerSize / 2,
+						pixelPos.x - playerSize / 2, pixelPos.y
+					]);
 					break;
 				case 'yellow':
-					spriteKey = 'player_yellow_warrior';
+					playerSprite.beginFill(playerColor);
+					// Triangle shape
+					playerSprite.drawPolygon([
+						pixelPos.x, pixelPos.y - playerSize / 2,
+						pixelPos.x - playerSize / 2, pixelPos.y + playerSize / 2,
+						pixelPos.x + playerSize / 2, pixelPos.y + playerSize / 2
+					]);
 					break;
 				case 'black':
-					spriteKey = 'player_black_warrior';
+					playerSprite.beginFill(playerColor);
+					playerSprite.drawRect(
+						pixelPos.x - playerSize / 2,
+						pixelPos.y - playerSize / 2,
+						playerSize,
+						playerSize
+					);
 					break;
 				default:
-					spriteKey = 'player_blue_warrior';
+					playerSprite.beginFill(playerColor);
+					playerSprite.drawCircle(pixelPos.x, pixelPos.y, playerSize / 2);
 			}
+			playerSprite.endFill();
 
-			console.log(`👥 Using sprite key: ${spriteKey}`);
+			this.gameObjectLayer.addChild(playerSprite);
+			this.playerSprites.set(player.id, playerSprite as any); // Type assertion
 
-			// Load player texture
-			try {
-				const playerResult = await spriteLoader.loadSprite(spriteKey);
-
-				if (playerResult.success && playerResult.texture) {
-					console.log(`👥 ✅ Player texture loaded for ${player.name}`);
-					const playerSprite = new Sprite(playerResult.texture);
-					playerSprite.x = pixelPos.x - playerSprite.width / 2;
-					playerSprite.y = pixelPos.y - playerSprite.height / 2;
-
-					// Scale player sprite to fit cell size
-					const cellSize = getCellSize(this.gridConfig);
-					const scale = Math.min(cellSize.width / playerSprite.width, cellSize.height / playerSprite.height) * 0.8;
-					playerSprite.scale.set(scale);
-
-					console.log(`👥 Player sprite created for ${player.name}:`, {
-						x: playerSprite.x,
-						y: playerSprite.y,
-						scale: scale,
-						width: playerSprite.width,
-						height: playerSprite.height
-					});
-
-					this.gameObjectLayer.addChild(playerSprite);
-					this.playerSprites.set(player.id, playerSprite);
-					console.log(`👥 Player sprite added to game object layer for ${player.name}`);
-				} else {
-					console.warn(`👥 ❌ Failed to load player texture for ${player.name}:`, playerResult.error);
-					// Create a fallback player sprite
-					const fallbackPlayer = new Graphics();
-					const playerColor = getPlayerColor(player.color);
-					fallbackPlayer.beginFill(playerColor);
-					const cellSize = getCellSize(this.gridConfig);
-					const size = Math.min(cellSize.width, cellSize.height) * 0.6;
-					fallbackPlayer.drawCircle(pixelPos.x, pixelPos.y, size / 2);
-					fallbackPlayer.endFill();
-					this.gameObjectLayer.addChild(fallbackPlayer);
-					console.log(`👥 Fallback player sprite created for ${player.name}`);
-				}
-			} catch (error) {
-				console.error(`👥 ❌ Error loading player sprite for ${player.name}:`, error);
-			}
+			console.log(`👥 Player sprite created for ${player.name}:`, {
+				x: pixelPos.x,
+				y: pixelPos.y,
+				size: playerSize,
+				color: player.color,
+				gridPos: player.position
+			});
+			console.log(`👥 Player sprite added to game object layer for ${player.name}`);
 		}
 
 		console.log(`👥 Player rendering complete. Total player sprites: ${this.playerSprites.size}`);
@@ -740,6 +716,156 @@ export class GameRenderer {
 	 */
 	getCurrentGameState(): GameState | null {
 		return this.currentGameState;
+	}
+
+	/**
+	 * 🔧 FIX: Debug method to expose renderer state
+	 */
+	debugRenderer(): void {
+		console.log('🎮 GameRenderer Debug Info:', {
+			appInitialized: this.isAppInitialized,
+			hasCanvas: !!this.app?.canvas,
+			canvasSize: this.app?.canvas ? {
+				width: this.app.canvas.width,
+				height: this.app.canvas.height
+			} : null,
+			stageChildren: this.app?.stage?.children?.length || 0,
+			layers: {
+				terrain: this.terrainLayer?.children?.length || 0,
+				gameObjects: this.gameObjectLayer?.children?.length || 0,
+				mechanics: this.mechanicsLayer?.children?.length || 0,
+				effects: this.effectsLayer?.children?.length || 0,
+				ui: this.uiLayer?.children?.length || 0
+			},
+			sprites: {
+				players: this.playerSprites.size,
+				boss: this.bossSprite ? 1 : 0,
+				terrain: this.terrainSprites.length,
+				mechanics: this.mechanicSprites.length
+			},
+			gameState: this.currentGameState ? {
+				hasPlayers: this.currentGameState.players?.size > 0,
+				hasBoss: !!this.currentGameState.boss,
+				playerCount: this.currentGameState.players?.size || 0
+			} : null,
+			gridConfig: this.gridConfig
+		});
+
+		// 🔧 FIX: Add detailed layer visibility debugging
+		console.log('🔍 LAYER VISIBILITY CHECK:');
+		if (this.app?.stage) {
+			this.app.stage.children.forEach((layer, index) => {
+				console.log(`Layer ${index} (${layer.name}):`, {
+					visible: layer.visible,
+					alpha: layer.alpha,
+					children: layer.children.length,
+					bounds: layer.getBounds(),
+					position: { x: layer.x, y: layer.y },
+					scale: { x: layer.scale.x, y: layer.scale.y }
+				});
+			});
+		}
+
+		// 🔧 FIX: Check individual sprite visibility
+		console.log('🔍 SPRITE VISIBILITY CHECK:');
+		if (this.gameObjectLayer) {
+			this.gameObjectLayer.children.forEach((sprite, index) => {
+				console.log(`GameObject ${index}:`, {
+					type: sprite.constructor.name,
+					visible: sprite.visible,
+					alpha: sprite.alpha,
+					position: { x: sprite.x, y: sprite.y },
+					bounds: sprite.getBounds(),
+					hasTexture: !!(sprite as any).texture
+				});
+			});
+		}
+
+		if (this.terrainLayer) {
+			console.log('🔍 TERRAIN CHECK:');
+			console.log(`Terrain children: ${this.terrainLayer.children.length}`);
+			if (this.terrainLayer.children.length > 0) {
+				const firstTerrain = this.terrainLayer.children[0];
+				console.log('First terrain cell:', {
+					type: firstTerrain.constructor.name,
+					visible: firstTerrain.visible,
+					alpha: firstTerrain.alpha,
+					bounds: firstTerrain.getBounds()
+				});
+			}
+		}
+	}
+
+	/**
+	 * 🔧 FIX: Force re-render method
+	 */
+	forceRerender(): void {
+		if (this.currentGameState) {
+			console.log('🎮 Force re-rendering game state...');
+			this.renderGameState();
+		} else {
+			console.warn('🎮 No game state to re-render');
+		}
+	}
+
+	/**
+	 * 🔧 FIX: Force all layers and sprites to be visible
+	 */
+	forceVisibility(): void {
+		console.log('🔍 FORCING ALL LAYERS AND SPRITES VISIBLE...');
+		
+		// Force all layers visible
+		if (this.terrainLayer) {
+			this.terrainLayer.visible = true;
+			this.terrainLayer.alpha = 1;
+			console.log('✅ Terrain layer forced visible');
+		}
+		
+		if (this.gameObjectLayer) {
+			this.gameObjectLayer.visible = true;
+			this.gameObjectLayer.alpha = 1;
+			console.log('✅ Game object layer forced visible');
+		}
+		
+		if (this.mechanicsLayer) {
+			this.mechanicsLayer.visible = true;
+			this.mechanicsLayer.alpha = 1;
+		}
+		
+		if (this.effectsLayer) {
+			this.effectsLayer.visible = true;
+			this.effectsLayer.alpha = 1;
+		}
+		
+		if (this.uiLayer) {
+			this.uiLayer.visible = true;
+			this.uiLayer.alpha = 1;
+		}
+
+		// Force all sprites visible
+		this.terrainSprites.forEach((sprite) => {
+			if (sprite) {
+				sprite.visible = true;
+				sprite.alpha = 1;
+			}
+		});
+		console.log(`✅ ${this.terrainSprites.length} terrain sprites forced visible`);
+
+		this.playerSprites.forEach((sprite) => {
+			if (sprite) {
+				sprite.visible = true;
+				sprite.alpha = 1;
+			}
+		});
+		console.log(`✅ ${this.playerSprites.size} player sprites forced visible`);
+
+		if (this.bossSprite) {
+			this.bossSprite.visible = true;
+			this.bossSprite.alpha = 1;
+			console.log('✅ Boss sprite forced visible');
+		}
+
+		console.log('🔍 FORCE VISIBILITY COMPLETE');
 	}
 }
 
