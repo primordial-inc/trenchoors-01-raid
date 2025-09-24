@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import type { GridConfig, GridClickEvent, GridDimensions } from '../types/GridTypes';
+import type { GridPosition, Player, Boss, EntityInfo } from '../types/GameTypes';
 
 export class GridBattlefield {
   private app: PIXI.Application;
@@ -16,11 +17,24 @@ export class GridBattlefield {
   private background: PIXI.Graphics;
   private cells: PIXI.Graphics[][];
   
+  // Entity layers
+  private playerLayer: PIXI.Container;
+  private bossLayer: PIXI.Container;
+  private uiLayer: PIXI.Container;
+  
+  // Entity management
+  private players = new Map<string, PIXI.Graphics>();
+  private playerLabels = new Map<string, PIXI.Text>();
+  private boss: PIXI.Graphics | null = null;
+  private bossHealthBar: PIXI.Graphics | null = null;
+  private bossLabel: PIXI.Text | null = null;
+  
   // Configuration
   private config: GridConfig;
   
   // Event handlers
   private clickHandler?: (event: GridClickEvent) => void;
+  private entityClickHandler?: (entity: EntityInfo) => void;
 
   constructor(config: Partial<GridConfig> = {}) {
     this.config = {
@@ -49,44 +63,76 @@ export class GridBattlefield {
     this.gridLines = new PIXI.Graphics();
     this.sideLabels = new PIXI.Container();
     
-    // Add to container
+    // Create entity layers
+    this.playerLayer = new PIXI.Container();
+    this.bossLayer = new PIXI.Container();
+    this.uiLayer = new PIXI.Container();
+    
+    // Add to container (order matters for rendering)
     this.container.addChild(this.background);
     this.container.addChild(this.gridLines);
     this.container.addChild(this.sideLabels);
+    this.container.addChild(this.playerLayer);
+    this.container.addChild(this.bossLayer);
+    this.container.addChild(this.uiLayer);
   }
 
   /**
    * Initialize the battlefield
    */
   async init(container: HTMLElement, width: number = 800, height: number = 600): Promise<void> {
-    this.config.width = width;
-    this.config.height = height;
-    
-    // Initialize PIXI app
-    await this.app.init({
-      width,
-      height,
-      backgroundColor: this.config.backgroundColor,
-      antialias: true,
-    });
+    try {
+      console.log('🎮 Initializing GridBattlefield...', { width, height });
+      
+      this.config.width = width;
+      this.config.height = height;
+      
+      // Initialize PIXI app
+      console.log('🎨 Initializing PIXI app...');
+      await this.app.init({
+        width,
+        height,
+        backgroundColor: this.config.backgroundColor,
+        antialias: true,
+      });
+      console.log('✅ PIXI app initialized');
 
-    // Mount to container
-    container.appendChild(this.app.canvas);
-    
-    // Add main container to stage
-    this.app.stage.addChild(this.container);
-    
-    // Calculate optimal cell size
-    this.calculateCellSize();
-    
-    // Initialize grid
-    this.initializeGrid();
-    
-    // Setup interaction
-    this.setupInteraction();
-    
-    // Render initial state
-    this.render();
+      // Mount to container
+      console.log('📱 Mounting canvas to container...');
+      container.appendChild(this.app.canvas);
+      console.log('✅ Canvas mounted');
+      
+      // Add main container to stage
+      console.log('🎭 Adding container to stage...');
+      this.app.stage.addChild(this.container);
+      console.log('✅ Container added to stage');
+      
+      // Calculate optimal cell size
+      console.log('📏 Calculating cell size...');
+      this.calculateCellSize();
+      console.log('✅ Cell size calculated:', this.cellSize);
+      
+      // Initialize grid
+      console.log('🗂️ Initializing grid...');
+      this.initializeGrid();
+      console.log('✅ Grid initialized');
+      
+      // Setup interaction
+      console.log('🖱️ Setting up interaction...');
+      this.setupInteraction();
+      console.log('✅ Interaction setup complete');
+      
+      // Render initial state
+      console.log('🎨 Rendering initial state...');
+      this.render();
+      console.log('✅ Initial render complete');
+      
+      console.log('🎉 GridBattlefield initialization complete!');
+      
+    } catch (error) {
+      console.error('❌ Failed to initialize GridBattlefield:', error);
+      throw error;
+    }
   }
 
   /**
@@ -383,9 +429,422 @@ export class GridBattlefield {
   }
 
   /**
+   * Set entity click handler
+   */
+  setEntityClickHandler(handler: (entity: EntityInfo) => void): void {
+    this.entityClickHandler = handler;
+  }
+
+  /**
+   * Convert grid position to screen coordinates
+   */
+  private gridToScreen(position: GridPosition): { x: number; y: number } {
+    const labelArea = this.getLabelArea();
+    return {
+      x: labelArea.left + position.x * this.cellSize + this.cellSize / 2,
+      y: labelArea.top + position.y * this.cellSize + this.cellSize / 2
+    };
+  }
+
+  /**
+   * Convert screen coordinates to grid position
+   */
+  private screenToGrid(x: number, y: number): GridPosition | null {
+    const labelArea = this.getLabelArea();
+    const gridX = Math.floor((x - labelArea.left) / this.cellSize);
+    const gridY = Math.floor((y - labelArea.top) / this.cellSize);
+    
+    if (gridX >= 0 && gridX < this.GRID_WIDTH && gridY >= 0 && gridY < this.GRID_HEIGHT) {
+      return { x: gridX, y: gridY };
+    }
+    return null;
+  }
+
+  /**
+   * Spawn a player entity
+   */
+  spawnPlayer(id: string, position: GridPosition, color: string, name: string): void {
+    this.removePlayer(id); // Remove existing player if any
+
+    const screenPos = this.gridToScreen(position);
+    
+    // Create player circle
+    const playerGraphic = new PIXI.Graphics();
+    playerGraphic.fill({ color: this.parseColor(color) });
+    playerGraphic.circle(0, 0, this.cellSize * 0.3);
+    playerGraphic.fill();
+    
+    // Add border for dead players
+    playerGraphic.stroke({ color: 0x000000, width: 2 });
+    playerGraphic.circle(0, 0, this.cellSize * 0.3);
+    
+    playerGraphic.x = screenPos.x;
+    playerGraphic.y = screenPos.y;
+    playerGraphic.interactive = true;
+    playerGraphic.cursor = 'pointer';
+    
+    // Create name label
+    const label = new PIXI.Text({
+      text: name,
+      style: {
+        fontSize: Math.max(10, this.cellSize * 0.15),
+        fill: 0xffffff,
+        align: 'center',
+        stroke: { color: 0x000000, width: 1 }
+      }
+    });
+    label.anchor.set(0.5, 0.5);
+    label.x = screenPos.x;
+    label.y = screenPos.y + this.cellSize * 0.4;
+    
+    // Store references
+    this.players.set(id, playerGraphic);
+    this.playerLabels.set(id, label);
+    
+    // Add to stage
+    this.playerLayer.addChild(playerGraphic);
+    this.uiLayer.addChild(label);
+    
+    // Setup click handler
+    playerGraphic.on('pointerdown', (event) => {
+      event.stopPropagation();
+      if (this.entityClickHandler) {
+        // Find player data - we'll need to store this separately or pass it in
+        const entityInfo: EntityInfo = {
+          type: 'player',
+          id,
+          name,
+          position,
+          data: { id, name, position, color, isAlive: true, damage: 0, deaths: 0 } as Player
+        };
+        this.entityClickHandler(entityInfo);
+      }
+    });
+    
+    this.render();
+  }
+
+  /**
+   * Update player position
+   */
+  updatePlayerPosition(id: string, newPosition: GridPosition): void {
+    const player = this.players.get(id);
+    const label = this.playerLabels.get(id);
+    
+    if (player && label) {
+      const screenPos = this.gridToScreen(newPosition);
+      player.x = screenPos.x;
+      player.y = screenPos.y;
+      label.x = screenPos.x;
+      label.y = screenPos.y + this.cellSize * 0.4;
+      this.render();
+    }
+  }
+
+  /**
+   * Update player state (alive/dead)
+   */
+  updatePlayerState(id: string, isAlive: boolean, _damage: number, _deaths: number): void {
+    const player = this.players.get(id);
+    const label = this.playerLabels.get(id);
+    
+    if (player && label) {
+      if (isAlive) {
+        player.alpha = 1.0;
+        player.tint = 0xffffff;
+        label.alpha = 1.0;
+      } else {
+        player.alpha = 0.5;
+        player.tint = 0x666666; // Gray out dead players
+        label.alpha = 0.7;
+        label.text = `${label.text} (DEAD)`;
+      }
+      this.render();
+    }
+  }
+
+  /**
+   * Remove a player
+   */
+  removePlayer(id: string): void {
+    const player = this.players.get(id);
+    const label = this.playerLabels.get(id);
+    
+    if (player) {
+      this.playerLayer.removeChild(player);
+      this.players.delete(id);
+    }
+    
+    if (label) {
+      this.uiLayer.removeChild(label);
+      this.playerLabels.delete(id);
+    }
+    
+    this.render();
+  }
+
+  /**
+   * Spawn boss entity
+   */
+  spawnBoss(position: GridPosition): void {
+    this.removeBoss(); // Remove existing boss if any
+
+    const screenPos = this.gridToScreen(position);
+    
+    // Create boss diamond shape
+    this.boss = new PIXI.Graphics();
+    
+    const bossSize = this.cellSize * 0.4;
+    
+    // Draw diamond shape manually
+    this.boss.beginFill(0xff0000);
+    this.boss.lineStyle(3, 0x000000);
+    this.boss.moveTo(-bossSize, 0);
+    this.boss.lineTo(0, -bossSize);
+    this.boss.lineTo(bossSize, 0);
+    this.boss.lineTo(0, bossSize);
+    this.boss.lineTo(-bossSize, 0);
+    this.boss.endFill();
+    
+    this.boss.x = screenPos.x;
+    this.boss.y = screenPos.y;
+    this.boss.interactive = true;
+    this.boss.cursor = 'pointer';
+    
+    // Create health bar background
+    this.bossHealthBar = new PIXI.Graphics();
+    this.bossHealthBar.fill({ color: 0x333333 });
+    this.bossHealthBar.rect(-bossSize * 1.2, -bossSize * 1.5, bossSize * 2.4, 8);
+    this.bossHealthBar.fill();
+    
+    this.bossHealthBar.x = screenPos.x;
+    this.bossHealthBar.y = screenPos.y;
+    
+    // Create boss label
+    this.bossLabel = new PIXI.Text({
+      text: 'BOSS',
+      style: {
+        fontSize: Math.max(12, this.cellSize * 0.2),
+        fill: 0xffffff,
+        align: 'center',
+        stroke: { color: 0x000000, width: 2 }
+      }
+    });
+    this.bossLabel.anchor.set(0.5, 0.5);
+    this.bossLabel.x = screenPos.x;
+    this.bossLabel.y = screenPos.y + bossSize * 1.2;
+    
+    // Add to stage
+    this.bossLayer.addChild(this.boss);
+    this.uiLayer.addChild(this.bossHealthBar);
+    this.uiLayer.addChild(this.bossLabel);
+    
+    // Setup click handler
+    this.boss.on('pointerdown', (event) => {
+      event.stopPropagation();
+      if (this.entityClickHandler) {
+        const entityInfo: EntityInfo = {
+          type: 'boss',
+          id: 'boss',
+          name: 'Boss',
+          position,
+          data: { position, currentHealth: 100, maxHealth: 100, phase: 1, isAlive: true } as Boss
+        };
+        this.entityClickHandler(entityInfo);
+      }
+    });
+    
+    this.render();
+  }
+
+  /**
+   * Update boss health and state
+   */
+  updateBoss(health: number, maxHealth: number, phase: number = 1, isAlive: boolean = true): void {
+    if (!this.boss || !this.bossHealthBar) return;
+
+    // Update health bar
+    const bossSize = this.cellSize * 0.4;
+    const healthPercent = Math.max(0, health / maxHealth);
+    
+    // Clear and redraw health bar
+    this.bossHealthBar.clear();
+    this.bossHealthBar.fill({ color: 0x333333 });
+    this.bossHealthBar.rect(-bossSize * 1.2, -bossSize * 1.5, bossSize * 2.4, 8);
+    this.bossHealthBar.fill();
+    
+    // Health bar fill
+    this.bossHealthBar.fill({ color: this.getHealthBarColor(healthPercent) });
+    this.bossHealthBar.rect(-bossSize * 1.2, -bossSize * 1.5, bossSize * 2.4 * healthPercent, 8);
+    this.bossHealthBar.fill();
+    
+    // Update boss appearance based on phase
+    this.boss.clear();
+    const phaseColor = this.getBossPhaseColor(phase);
+    
+    // Draw diamond shape manually
+    this.boss.beginFill(phaseColor);
+    this.boss.lineStyle(3, 0x000000);
+    this.boss.moveTo(-bossSize, 0);
+    this.boss.lineTo(0, -bossSize);
+    this.boss.lineTo(bossSize, 0);
+    this.boss.lineTo(0, bossSize);
+    this.boss.lineTo(-bossSize, 0);
+    this.boss.endFill();
+    
+    // Update label with health info
+    if (this.bossLabel) {
+      this.bossLabel.text = `BOSS (${health}/${maxHealth}) - Phase ${phase}`;
+    }
+    
+    // Gray out if dead
+    if (!isAlive) {
+      this.boss.alpha = 0.5;
+      this.boss.tint = 0x666666;
+    } else {
+      this.boss.alpha = 1.0;
+      this.boss.tint = 0xffffff;
+    }
+    
+    this.render();
+  }
+
+  /**
+   * Remove boss
+   */
+  removeBoss(): void {
+    if (this.boss) {
+      this.bossLayer.removeChild(this.boss);
+      this.boss = null;
+    }
+    if (this.bossHealthBar) {
+      this.uiLayer.removeChild(this.bossHealthBar);
+      this.bossHealthBar = null;
+    }
+    if (this.bossLabel) {
+      this.uiLayer.removeChild(this.bossLabel);
+      this.bossLabel = null;
+    }
+    this.render();
+  }
+
+  /**
+   * Clear all entities
+   */
+  clearAllEntities(): void {
+    // Remove all players
+    for (const [id] of this.players) {
+      this.removePlayer(id);
+    }
+    
+    // Remove boss
+    this.removeBoss();
+  }
+
+  /**
+   * Get health bar color based on health percentage
+   */
+  private getHealthBarColor(healthPercent: number): number {
+    if (healthPercent > 0.6) return 0x00ff00; // Green
+    if (healthPercent > 0.3) return 0xffff00; // Yellow
+    return 0xff0000; // Red
+  }
+
+  /**
+   * Get boss color based on phase
+   */
+  private getBossPhaseColor(phase: number): number {
+    switch (phase) {
+      case 1: return 0xff0000; // Red
+      case 2: return 0xff6600; // Orange
+      case 3: return 0x9900ff; // Purple
+      default: return 0xff0000;
+    }
+  }
+
+  /**
+   * Parse color string to number
+   */
+  private parseColor(color: string): number {
+    const colorMap: Record<string, number> = {
+      'blue': 0x0000ff,
+      'red': 0xff0000,
+      'yellow': 0xffff00,
+      'green': 0x00ff00,
+      'purple': 0x800080,
+      'orange': 0xffa500,
+      'pink': 0xffc0cb,
+      'cyan': 0x00ffff,
+      'black': 0x000000,
+      'white': 0xffffff
+    };
+    return colorMap[color.toLowerCase()] || 0x808080; // Default to gray
+  }
+
+  /**
+   * Get entity at position
+   */
+  getEntityAtPosition(position: GridPosition): EntityInfo | null {
+    // Check players
+    for (const [id, player] of this.players) {
+      const label = this.playerLabels.get(id);
+      if (label) {
+        const playerPos = this.screenToGrid(player.x, player.y);
+        if (playerPos && playerPos.x === position.x && playerPos.y === position.y) {
+          return {
+            type: 'player',
+            id,
+            name: label.text,
+            position,
+            data: { id, name: label.text, position, color: 'blue', isAlive: true, damage: 0, deaths: 0 } as Player
+          };
+        }
+      }
+    }
+    
+    // Check boss
+    if (this.boss) {
+      const bossPos = this.screenToGrid(this.boss.x, this.boss.y);
+      if (bossPos && bossPos.x === position.x && bossPos.y === position.y) {
+        return {
+          type: 'boss',
+          id: 'boss',
+          name: 'Boss',
+          position,
+          data: { position, currentHealth: 100, maxHealth: 100, phase: 1, isAlive: true } as Boss
+        };
+      }
+    }
+    
+    return null;
+  }
+
+  /**
    * Destroy the battlefield
    */
   destroy(): void {
-    this.app.destroy(true);
+    console.log('🧹 Destroying GridBattlefield...');
+    
+    try {
+      // Clear all entities first
+      this.clearAllEntities();
+      
+      // Remove canvas from DOM if it exists and is still a child
+      if (this.app.canvas && this.app.canvas.parentNode) {
+        console.log('🗑️ Removing canvas from DOM...');
+        try {
+          this.app.canvas.parentNode.removeChild(this.app.canvas);
+        } catch (error) {
+          console.warn('⚠️ Could not remove canvas from DOM (may have been removed already):', error);
+        }
+      }
+      
+      // Destroy PIXI application
+      this.app.destroy(true);
+      
+      console.log('✅ GridBattlefield destroyed');
+    } catch (error) {
+      console.error('❌ Error during battlefield destruction:', error);
+    }
   }
 }
