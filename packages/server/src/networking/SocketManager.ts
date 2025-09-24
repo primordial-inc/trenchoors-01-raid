@@ -69,6 +69,12 @@ export class SocketManager {
     if (command.playerId) {
       this.connectedSockets.set(socket.id, command.playerId);
       socket.data.playerId = command.playerId;
+      
+      // Get the player data and broadcast player joined event
+      const player = this.gameState.getPlayer(command.playerId);
+      if (player) {
+        this.broadcastPlayerJoined(player);
+      }
     }
 
     // Broadcast updated game state to all clients

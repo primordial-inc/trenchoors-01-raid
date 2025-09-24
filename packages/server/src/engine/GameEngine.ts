@@ -212,6 +212,14 @@ export class GameEngine {
     const players = this.gameState.getAlivePlayers();
     
     for (const player of players) {
+      // Give new players a grace period (5 seconds) before they can be killed by mechanics
+      const gracePeriod = 5000; // 5 seconds
+      const timeSinceJoin = Date.now() - player.joinedAt.getTime();
+      
+      if (timeSinceJoin < gracePeriod) {
+        continue; // Skip safety check for new players
+      }
+      
       if (!this.mechanicsManager.checkPlayerSafety(player)) {
         // Player is in danger from a mechanic
         console.log(`Player ${player.name} is in danger from boss mechanics!`);
@@ -223,7 +231,7 @@ export class GameEngine {
         this.socketManager?.broadcastPlayerDied(player.id);
         
         // Broadcast respawn instruction
-        this.socketManager?.broadcastAdminMessage(`Player ${player.name} died! Use !respawn to return to the fight.`);
+        this.socketManager?.broadcastAdminMessage(`Player ${player.name} died! Use respawn to return to the fight.`);
       }
     }
   }

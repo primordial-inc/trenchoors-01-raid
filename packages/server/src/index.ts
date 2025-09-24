@@ -112,9 +112,8 @@ server.listen(PORT, () => {
 	console.log(`Server running on port ${PORT}`);
 	console.log(`Health check: http://localhost:${PORT}/health`);
 	console.log(`Admin panel: http://localhost:${PORT}/admin/game-state`);
-	
-	// Start the game engine
-	gameEngine.start();
+	console.log(`Game status: ${gameState.getStatus()}`);
+	console.log(`Use the admin CLI to control the game: npm run admin`);
 });
 
 server.on('error', (err: any) => {

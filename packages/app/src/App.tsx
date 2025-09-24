@@ -1,11 +1,11 @@
-import { GifTestComponent } from './components/GifTestComponent'
+import { GridTestComponent } from './components/GridTestComponent'
 import './App.css'
 
 function App() {
   return (
     <div style={{ padding: '20px', backgroundColor: '#34495e', minHeight: '100vh' }}>
-      <h1 style={{ color: 'white', textAlign: 'center' }}>🎮 GIF Animation Framework</h1>
-      <GifTestComponent />
+      <h1 style={{ color: 'white', textAlign: 'center' }}>🎯 Grid Battlefield</h1>
+      <GridTestComponent />
     </div>
   )
 }

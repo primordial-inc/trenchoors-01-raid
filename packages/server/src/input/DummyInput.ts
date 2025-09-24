@@ -51,6 +51,10 @@ export class DummyInput {
     
     if (result.success) {
       console.log(`Join command: ${result.message}`);
+      // Set the playerId in the command if join was successful
+      if (result.data?.player?.id) {
+        command.playerId = result.data.player.id;
+      }
     } else {
       console.log(`Join command failed: ${result.message}`);
     }
