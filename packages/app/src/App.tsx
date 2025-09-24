@@ -1,11 +1,11 @@
-import { GridTestComponent } from './components/GridTestComponent'
+import { SpriteSheetTestComponent } from './components/SpriteSheetTestComponent'
 import './App.css'
 
 function App() {
   return (
     <div style={{ padding: '20px', backgroundColor: '#34495e', minHeight: '100vh' }}>
-      <h1 style={{ color: 'white', textAlign: 'center' }}>🎯 Grid Battlefield</h1>
-      <GridTestComponent />
+      <h1 style={{ color: 'white', textAlign: 'center' }}>🎬 Sprite Sheet Animation System</h1>
+      <SpriteSheetTestComponent />
     </div>
   )
 }
