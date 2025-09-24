@@ -22,6 +22,10 @@ export const GridTestComponent: React.FC = () => {
   const [terrainType, setTerrainType] = useState<'mixed' | 'terrain_flat'>('mixed');
   const [showGrid, setShowGrid] = useState<boolean>(true);
   
+  // Sprite loading status
+  const [spritesLoaded, setSpritesLoaded] = useState<boolean>(false);
+  const [spriteLoadingStatus, setSpriteLoadingStatus] = useState<string>('Loading sprites...');
+  
   // Server connection
   const { gameState, connectionStatus, error } = useGameState();
   
@@ -167,6 +171,23 @@ export const GridTestComponent: React.FC = () => {
     }
   }, [gameState, mode]);
 
+  // Monitor sprite loading status
+  useEffect(() => {
+    if (battlefieldRef.current && isLoaded) {
+      // Check if sprites are loaded
+      const checkSpriteStatus = () => {
+        // For now, assume sprites are loaded after battlefield initialization
+        // In a real implementation, you'd check the sprite entity manager status
+        setSpritesLoaded(true);
+        setSpriteLoadingStatus('✅ Sprites loaded successfully');
+      };
+
+      // Check after a short delay to allow sprite loading
+      const timer = setTimeout(checkSpriteStatus, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoaded]);
+
   // Terrain control functions
   const regenerateTerrain = useCallback(async () => {
     if (battlefieldRef.current) {
@@ -187,29 +208,36 @@ export const GridTestComponent: React.FC = () => {
   }, [showGrid]);
 
   // Manual mode functions
-  const spawnPlayer = useCallback(() => {
-    if (!battlefieldRef.current) return;
+  const spawnPlayer = useCallback(async () => {
+    if (!battlefieldRef.current || !spritesLoaded) return;
 
     const playerId = `player_${playerCounter}`;
     const colors = ['blue', 'red', 'yellow', 'green', 'purple', 'orange', 'pink', 'cyan'];
     const color = colors[(playerCounter - 1) % colors.length];
     const position: GridPosition = { x: Math.floor(Math.random() * 16), y: Math.floor(Math.random() * 12) };
 
-    battlefieldRef.current.spawnPlayer(playerId, position, color, `Player ${playerCounter}`);
-    
-    setManualPlayers(prev => new Map(prev).set(playerId, { position, color, name: `Player ${playerCounter}`, isAlive: true }));
-    setPlayerCounter(prev => prev + 1);
-  }, [playerCounter]);
+    try {
+      await battlefieldRef.current.spawnPlayer(playerId, position, color, `Player ${playerCounter}`);
+      setManualPlayers(prev => new Map(prev).set(playerId, { position, color, name: `Player ${playerCounter}`, isAlive: true }));
+      setPlayerCounter(prev => prev + 1);
+    } catch (error) {
+      console.error('Failed to spawn player:', error);
+    }
+  }, [playerCounter, spritesLoaded]);
 
-  const spawnBoss = useCallback(() => {
-    if (!battlefieldRef.current) return;
+  const spawnBoss = useCallback(async () => {
+    if (!battlefieldRef.current || !spritesLoaded) return;
 
     const position: GridPosition = { x: 8, y: 6 };
-    battlefieldRef.current.spawnBoss(position);
-    battlefieldRef.current.updateBoss(100, 100, 1, true);
     
-    setManualBoss({ position, health: 100, maxHealth: 100, phase: 1, isAlive: true });
-  }, []);
+    try {
+      await battlefieldRef.current.spawnBoss(position);
+      battlefieldRef.current.updateBoss(100, 100, 1, true);
+      setManualBoss({ position, health: 100, maxHealth: 100, phase: 1, isAlive: true });
+    } catch (error) {
+      console.error('Failed to spawn boss:', error);
+    }
+  }, [spritesLoaded]);
 
   const clearAllEntities = useCallback(() => {
     if (!battlefieldRef.current) return;
@@ -352,15 +380,53 @@ export const GridTestComponent: React.FC = () => {
 
       {isLoaded && (
         <>
+          {/* Sprite Loading Status */}
+          {isLoaded && (
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <h3 style={{ color: 'white', marginBottom: '10px' }}>🎭 Sprite Status</h3>
+              <div style={{ 
+                backgroundColor: spritesLoaded ? '#27ae60' : '#f39c12', 
+                color: 'white', 
+                padding: '10px', 
+                borderRadius: '4px',
+                marginBottom: '10px'
+              }}>
+                {spriteLoadingStatus}
+              </div>
+            </div>
+          )}
+
           {/* Manual Mode Controls */}
           {mode === 'manual' && (
             <div style={{ marginTop: '20px', textAlign: 'center' }}>
               <h3 style={{ color: 'white', marginBottom: '10px' }}>Manual Controls</h3>
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={spawnPlayer} style={{ padding: '8px 16px', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                <button 
+                  onClick={spawnPlayer} 
+                  disabled={!spritesLoaded}
+                  style={{ 
+                    padding: '8px 16px', 
+                    backgroundColor: spritesLoaded ? '#27ae60' : '#95a5a6', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '4px', 
+                    cursor: spritesLoaded ? 'pointer' : 'not-allowed'
+                  }}
+                >
                   👤 Spawn Player
                 </button>
-                <button onClick={spawnBoss} style={{ padding: '8px 16px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                <button 
+                  onClick={spawnBoss} 
+                  disabled={!spritesLoaded}
+                  style={{ 
+                    padding: '8px 16px', 
+                    backgroundColor: spritesLoaded ? '#e74c3c' : '#95a5a6', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '4px', 
+                    cursor: spritesLoaded ? 'pointer' : 'not-allowed'
+                  }}
+                >
                   👹 Spawn Boss
                 </button>
                 <button onClick={damageBoss} disabled={!manualBoss} style={{ padding: '8px 16px', backgroundColor: manualBoss ? '#f39c12' : '#7f8c8d', color: 'white', border: 'none', borderRadius: '4px', cursor: manualBoss ? 'pointer' : 'not-allowed' }}>

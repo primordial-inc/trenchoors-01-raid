@@ -3,6 +3,8 @@ import type { GridConfig, GridClickEvent, GridDimensions } from '../types/GridTy
 import type { GridPosition, Player, Boss, EntityInfo } from '../types/GameTypes';
 import { SpriteSheetManager } from '../assets/SpriteSheetManager';
 import { TerrainManager, type TerrainPattern } from './TerrainManager';
+import { SpriteEntityManager } from './SpriteEntityManager';
+import { SpriteAnimationController } from './SpriteAnimationController';
 
 export class GridBattlefield {
   private app: PIXI.Application;
@@ -25,15 +27,18 @@ export class GridBattlefield {
   private terrainLayer: PIXI.Container;
   private terrainPattern: TerrainPattern | null = null;
 
+  // Entity sprite system
+  private spriteEntityManager: SpriteEntityManager;
+
   // Entity layers
   private playerLayer: PIXI.Container;
   private bossLayer: PIXI.Container;
   private uiLayer: PIXI.Container;
 
-  // Entity management
-  private players = new Map<string, PIXI.Graphics>();
+  // Entity management (now using animated sprites)
+  private players = new Map<string, PIXI.AnimatedSprite>();
   private playerLabels = new Map<string, PIXI.Text>();
-  private boss: PIXI.Graphics | null = null;
+  private boss: PIXI.AnimatedSprite | null = null;
   private bossHealthBar: PIXI.Graphics | null = null;
   private bossLabel: PIXI.Text | null = null;
 
@@ -69,6 +74,7 @@ export class GridBattlefield {
     // Initialize sprite and terrain managers
     this.spriteManager = new SpriteSheetManager();
     this.terrainManager = new TerrainManager(this.spriteManager);
+    this.spriteEntityManager = new SpriteEntityManager(this.spriteManager, new SpriteAnimationController());
 
     // Create visual elements
     this.background = new PIXI.Graphics();
@@ -195,6 +201,9 @@ export class GridBattlefield {
 
     // Load and draw terrain sprites
     await this.loadAndDrawTerrain(labelArea);
+
+    // Load entity sprites
+    await this.spriteEntityManager.loadEntitySprites();
 
     // Draw grid cells (now just for interaction, not visual)
     this.drawGridCells(labelArea);
@@ -514,67 +523,69 @@ export class GridBattlefield {
   }
 
   /**
-   * Spawn a player entity
+   * Spawn a player entity with animated sprite
    */
-  spawnPlayer(id: string, position: GridPosition, color: string, name: string): void {
+  async spawnPlayer(id: string, position: GridPosition, color: string, name: string): Promise<void> {
     this.removePlayer(id); // Remove existing player if any
 
-    const screenPos = this.gridToScreen(position);
-
-    // Create player circle
-    const playerGraphic = new PIXI.Graphics();
-    playerGraphic.fill({ color: this.parseColor(color) });
-    playerGraphic.circle(0, 0, this.cellSize * 0.3);
-    playerGraphic.fill();
-
-    // Add border for dead players
-    playerGraphic.stroke({ color: 0x000000, width: 2 });
-    playerGraphic.circle(0, 0, this.cellSize * 0.3);
-
-    playerGraphic.x = screenPos.x;
-    playerGraphic.y = screenPos.y;
-    playerGraphic.interactive = true;
-    playerGraphic.cursor = 'pointer';
-
-    // Create name label
-    const label = new PIXI.Text({
-      text: name,
-      style: {
-        fontSize: Math.max(10, this.cellSize * 0.15),
-        fill: 0xffffff,
-        align: 'center',
-        stroke: { color: 0x000000, width: 1 }
+    try {
+      // Create animated player sprite
+      const playerSprite = await this.spriteEntityManager.createPlayerSprite(color, position, id);
+      
+      if (!playerSprite) {
+        console.error(`Failed to create sprite for player: ${id}`);
+        return;
       }
-    });
-    label.anchor.set(0.5, 0.5);
-    label.x = screenPos.x;
-    label.y = screenPos.y + this.cellSize * 0.4;
 
-    // Store references
-    this.players.set(id, playerGraphic);
-    this.playerLabels.set(id, label);
+      // Position the sprite
+      const screenPos = this.gridToScreen(position);
+      playerSprite.x = screenPos.x;
+      playerSprite.y = screenPos.y;
+      playerSprite.interactive = true;
+      playerSprite.cursor = 'pointer';
 
-    // Add to stage
-    this.playerLayer.addChild(playerGraphic);
-    this.uiLayer.addChild(label);
+      // Create name label
+      const label = new PIXI.Text({
+        text: name,
+        style: {
+          fontSize: Math.max(10, this.cellSize * 0.15),
+          fill: 0xffffff,
+          align: 'center',
+          stroke: { color: 0x000000, width: 1 }
+        }
+      });
+      label.anchor.set(0.5, 0.5);
+      label.x = screenPos.x;
+      label.y = screenPos.y + this.cellSize * 0.4;
 
-    // Setup click handler
-    playerGraphic.on('pointerdown', (event) => {
-      event.stopPropagation();
-      if (this.entityClickHandler) {
-        // Find player data - we'll need to store this separately or pass it in
-        const entityInfo: EntityInfo = {
-          type: 'player',
-          id,
-          name,
-          position,
-          data: { id, name, position, color, isAlive: true, damage: 0, deaths: 0 } as Player
-        };
-        this.entityClickHandler(entityInfo);
-      }
-    });
+      // Store references
+      this.players.set(id, playerSprite);
+      this.playerLabels.set(id, label);
 
-    this.render();
+      // Add to stage
+      this.playerLayer.addChild(playerSprite);
+      this.uiLayer.addChild(label);
+
+      // Setup click handler
+      playerSprite.on('pointerdown', (event) => {
+        event.stopPropagation();
+        if (this.entityClickHandler) {
+          const entityInfo: EntityInfo = {
+            type: 'player',
+            id,
+            name,
+            position,
+            data: { id, name, position, color, isAlive: true, damage: 0, deaths: 0 } as Player
+          };
+          this.entityClickHandler(entityInfo);
+        }
+      });
+
+      this.render();
+      console.log(`✅ Spawned animated player: ${name} at (${position.x}, ${position.y})`);
+    } catch (error) {
+      console.error(`❌ Failed to spawn player: ${id}`, error);
+    }
   }
 
   /**
@@ -625,6 +636,7 @@ export class GridBattlefield {
 
     if (player) {
       this.playerLayer.removeChild(player);
+      this.spriteEntityManager.destroySprite(id);
       this.players.delete(id);
     }
 
@@ -637,77 +649,80 @@ export class GridBattlefield {
   }
 
   /**
-   * Spawn boss entity
+   * Spawn boss entity with animated sprite
    */
-  spawnBoss(position: GridPosition): void {
+  async spawnBoss(position: GridPosition): Promise<void> {
     this.removeBoss(); // Remove existing boss if any
 
-    const screenPos = this.gridToScreen(position);
-
-    // Create boss diamond shape
-    this.boss = new PIXI.Graphics();
-
-    const bossSize = this.cellSize * 0.4;
-
-    // Draw diamond shape manually
-    this.boss.beginFill(0xff0000);
-    this.boss.lineStyle(3, 0x000000);
-    this.boss.moveTo(-bossSize, 0);
-    this.boss.lineTo(0, -bossSize);
-    this.boss.lineTo(bossSize, 0);
-    this.boss.lineTo(0, bossSize);
-    this.boss.lineTo(-bossSize, 0);
-    this.boss.endFill();
-
-    this.boss.x = screenPos.x;
-    this.boss.y = screenPos.y;
-    this.boss.interactive = true;
-    this.boss.cursor = 'pointer';
-
-    // Create health bar background
-    this.bossHealthBar = new PIXI.Graphics();
-    this.bossHealthBar.fill({ color: 0x333333 });
-    this.bossHealthBar.rect(-bossSize * 1.2, -bossSize * 1.5, bossSize * 2.4, 8);
-    this.bossHealthBar.fill();
-
-    this.bossHealthBar.x = screenPos.x;
-    this.bossHealthBar.y = screenPos.y;
-
-    // Create boss label
-    this.bossLabel = new PIXI.Text({
-      text: 'BOSS',
-      style: {
-        fontSize: Math.max(12, this.cellSize * 0.2),
-        fill: 0xffffff,
-        align: 'center',
-        stroke: { color: 0x000000, width: 2 }
+    try {
+      // Create animated boss sprite
+      const bossSprite = await this.spriteEntityManager.createBossSprite(position, 'boss');
+      
+      if (!bossSprite) {
+        console.error(`Failed to create sprite for boss`);
+        return;
       }
-    });
-    this.bossLabel.anchor.set(0.5, 0.5);
-    this.bossLabel.x = screenPos.x;
-    this.bossLabel.y = screenPos.y + bossSize * 1.2;
 
-    // Add to stage
-    this.bossLayer.addChild(this.boss);
-    this.uiLayer.addChild(this.bossHealthBar);
-    this.uiLayer.addChild(this.bossLabel);
+      // Position the sprite
+      const screenPos = this.gridToScreen(position);
+      bossSprite.x = screenPos.x;
+      bossSprite.y = screenPos.y;
+      bossSprite.interactive = true;
+      bossSprite.cursor = 'pointer';
 
-    // Setup click handler
-    this.boss.on('pointerdown', (event) => {
-      event.stopPropagation();
-      if (this.entityClickHandler) {
-        const entityInfo: EntityInfo = {
-          type: 'boss',
-          id: 'boss',
-          name: 'Boss',
-          position,
-          data: { position, currentHealth: 100, maxHealth: 100, phase: 1, isAlive: true } as Boss
-        };
-        this.entityClickHandler(entityInfo);
-      }
-    });
+      const bossSize = this.cellSize * 0.4;
 
-    this.render();
+      // Create health bar background
+      this.bossHealthBar = new PIXI.Graphics();
+      this.bossHealthBar.fill({ color: 0x333333 });
+      this.bossHealthBar.rect(-bossSize * 1.2, -bossSize * 1.5, bossSize * 2.4, 8);
+      this.bossHealthBar.fill();
+
+      this.bossHealthBar.x = screenPos.x;
+      this.bossHealthBar.y = screenPos.y;
+
+      // Create boss label
+      this.bossLabel = new PIXI.Text({
+        text: 'BOSS',
+        style: {
+          fontSize: Math.max(12, this.cellSize * 0.2),
+          fill: 0xffffff,
+          align: 'center',
+          stroke: { color: 0x000000, width: 2 }
+        }
+      });
+      this.bossLabel.anchor.set(0.5, 0.5);
+      this.bossLabel.x = screenPos.x;
+      this.bossLabel.y = screenPos.y + bossSize * 1.2;
+
+      // Store reference
+      this.boss = bossSprite;
+
+      // Add to stage
+      this.bossLayer.addChild(bossSprite);
+      this.uiLayer.addChild(this.bossHealthBar);
+      this.uiLayer.addChild(this.bossLabel);
+
+      // Setup click handler
+      bossSprite.on('pointerdown', (event) => {
+        event.stopPropagation();
+        if (this.entityClickHandler) {
+          const entityInfo: EntityInfo = {
+            type: 'boss',
+            id: 'boss',
+            name: 'Boss',
+            position,
+            data: { position, currentHealth: 100, maxHealth: 100, phase: 1, isAlive: true } as Boss
+          };
+          this.entityClickHandler(entityInfo);
+        }
+      });
+
+      this.render();
+      console.log(`✅ Spawned animated boss at (${position.x}, ${position.y})`);
+    } catch (error) {
+      console.error(`❌ Failed to spawn boss`, error);
+    }
   }
 
   /**
@@ -731,19 +746,9 @@ export class GridBattlefield {
     this.bossHealthBar.rect(-bossSize * 1.2, -bossSize * 1.5, bossSize * 2.4 * healthPercent, 8);
     this.bossHealthBar.fill();
 
-    // Update boss appearance based on phase
-    this.boss.clear();
+    // Update boss sprite appearance based on phase
     const phaseColor = this.getBossPhaseColor(phase);
-
-    // Draw diamond shape manually
-    this.boss.beginFill(phaseColor);
-    this.boss.lineStyle(3, 0x000000);
-    this.boss.moveTo(-bossSize, 0);
-    this.boss.lineTo(0, -bossSize);
-    this.boss.lineTo(bossSize, 0);
-    this.boss.lineTo(0, bossSize);
-    this.boss.lineTo(-bossSize, 0);
-    this.boss.endFill();
+    this.boss.tint = phaseColor;
 
     // Update label with health info
     if (this.bossLabel) {
@@ -768,6 +773,7 @@ export class GridBattlefield {
   removeBoss(): void {
     if (this.boss) {
       this.bossLayer.removeChild(this.boss);
+      this.spriteEntityManager.destroySprite('boss');
       this.boss = null;
     }
     if (this.bossHealthBar) {
@@ -815,24 +821,6 @@ export class GridBattlefield {
     }
   }
 
-  /**
-   * Parse color string to number
-   */
-  private parseColor(color: string): number {
-    const colorMap: Record<string, number> = {
-      'blue': 0x0000ff,
-      'red': 0xff0000,
-      'yellow': 0xffff00,
-      'green': 0x00ff00,
-      'purple': 0x800080,
-      'orange': 0xffa500,
-      'pink': 0xffc0cb,
-      'cyan': 0x00ffff,
-      'black': 0x000000,
-      'white': 0xffffff
-    };
-    return colorMap[color.toLowerCase()] || 0x808080; // Default to gray
-  }
 
   /**
    * Get entity at position
@@ -917,6 +905,11 @@ export class GridBattlefield {
       // Clean up terrain resources
       if (this.terrainManager) {
         this.terrainManager.destroy();
+      }
+      
+      // Clean up sprite entity resources
+      if (this.spriteEntityManager) {
+        this.spriteEntityManager.destroy();
       }
       
       if (this.spriteManager) {
