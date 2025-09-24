@@ -24,28 +24,42 @@ export const SpriteSheetTestComponent: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
-  // Initialize PIXI app
+  // Initialize PIXI app - CORRECTED for PIXI v8 
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    const app = new PIXI.Application({
-      view: canvasRef.current,
-      width: 800,
-      height: 600,
-      backgroundColor: 0x2c3e50,
-      antialias: true,
-    });
+    const initApp = async () => {
+      try {
+        // ✅ PIXI v8: Create and initialize properly
+        const app = new PIXI.Application();
 
-    appRef.current = app;
-    spriteManagerRef.current = new SpriteSheetManager();
-    animationControllerRef.current = new SpriteAnimationController();
+        await app.init({
+          canvas: canvasRef.current!,
+          width: 800,
+          height: 600,
+          backgroundColor: 0x2c3e50,
+          antialias: true,
+        });
 
-    // Create main container
-    const container = new PIXI.Container();
-    container.x = app.screen.width / 2;
-    container.y = app.screen.height / 2;
-    app.stage.addChild(container);
-    containerRef.current = container;
+        appRef.current = app;
+        spriteManagerRef.current = new SpriteSheetManager();
+        animationControllerRef.current = new SpriteAnimationController();
+
+        // Create main container
+        const container = new PIXI.Container();
+        container.x = app.screen.width / 2;
+        container.y = app.screen.height / 2;
+        app.stage.addChild(container);
+        containerRef.current = container;
+
+        console.log('✅ PIXI App initialized successfully');
+      } catch (error) {
+        console.error('❌ Failed to initialize PIXI app:', error);
+        setError('Failed to initialize PIXI application');
+      }
+    };
+
+    initApp();
 
     return () => {
       if (animationControllerRef.current) {
@@ -54,9 +68,12 @@ export const SpriteSheetTestComponent: React.FC = () => {
       if (spriteManagerRef.current) {
         spriteManagerRef.current.destroyAll();
       }
-      app.destroy(true);
+      if (appRef.current) {
+        appRef.current.destroy(true);
+      }
     };
   }, []);
+
 
   // Update animation info
   useEffect(() => {
@@ -117,29 +134,22 @@ export const SpriteSheetTestComponent: React.FC = () => {
       // Get the chopped frames
       const spriteFrames = spriteManagerRef.current.chopSpriteSheet(selectedSheet, config);
 
-      // Create animated sprite
-      const animatedSprite = spriteManagerRef.current.createAnimatedSprite(selectedSheet, config);
-      
-      // Center the sprite
-      animatedSprite.anchor.set(0.5, 0.5);
-      
-      // Add to container
-      containerRef.current.addChild(animatedSprite);
-
-      // Register with animation controller
-      animationControllerRef.current.createSprite('test-sprite', spriteFrames, {
+      // ✅ ONLY create the animation controller sprite (not both!)
+      const animatedSprite = animationControllerRef.current.createSprite('test-sprite', spriteFrames, {
         animationSpeed,
         loop: isLooping,
         anchor: { x: 0.5, y: 0.5 }
       });
+
+      // ✅ Add the controller's sprite to the container (this one can be animated)
+      containerRef.current.addChild(animatedSprite);
 
       setIsLoaded(true);
       setTotalFrames(frameCount);
       setCurrentFrame(0);
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sprite sheet');
-      console.error('Error loading sprite sheet:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
@@ -186,15 +196,15 @@ export const SpriteSheetTestComponent: React.FC = () => {
   return (
     <div style={{ display: 'flex', gap: '20px', padding: '20px' }}>
       {/* Controls Panel */}
-      <div style={{ 
-        width: '300px', 
-        backgroundColor: '#34495e', 
-        padding: '20px', 
+      <div style={{
+        width: '300px',
+        backgroundColor: '#34495e',
+        padding: '20px',
         borderRadius: '8px',
         color: 'white'
       }}>
         <h3 style={{ marginTop: 0, color: '#ecf0f1' }}>🎬 Sprite Sheet Animation</h3>
-        
+
         {/* Sheet Selection */}
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
@@ -223,7 +233,7 @@ export const SpriteSheetTestComponent: React.FC = () => {
         {/* Frame Configuration */}
         <div style={{ marginBottom: '20px' }}>
           <h4 style={{ margin: '0 0 10px 0', color: '#3498db' }}>⚙️ Frame Config</h4>
-          
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '12px', marginBottom: '2px' }}>Width:</label>
@@ -244,7 +254,7 @@ export const SpriteSheetTestComponent: React.FC = () => {
               />
             </div>
           </div>
-          
+
           <div>
             <label style={{ display: 'block', fontSize: '12px', marginBottom: '2px' }}>Frame Count:</label>
             <input
@@ -279,7 +289,7 @@ export const SpriteSheetTestComponent: React.FC = () => {
         {isLoaded && (
           <div style={{ marginBottom: '20px' }}>
             <h4 style={{ margin: '0 0 10px 0', color: '#e74c3c' }}>▶️ Animation Controls</h4>
-            
+
             <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
               <button
                 onClick={playAnimation}

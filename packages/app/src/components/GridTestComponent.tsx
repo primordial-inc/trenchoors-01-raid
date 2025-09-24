@@ -18,6 +18,10 @@ export const GridTestComponent: React.FC = () => {
   // Mode selection
   const [mode, setMode] = useState<'manual' | 'server'>('manual');
   
+  // Terrain controls
+  const [terrainType, setTerrainType] = useState<'mixed' | 'terrain_flat'>('mixed');
+  const [showGrid, setShowGrid] = useState<boolean>(true);
+  
   // Server connection
   const { gameState, connectionStatus, error } = useGameState();
   
@@ -163,6 +167,25 @@ export const GridTestComponent: React.FC = () => {
     }
   }, [gameState, mode]);
 
+  // Terrain control functions
+  const regenerateTerrain = useCallback(async () => {
+    if (battlefieldRef.current) {
+      try {
+        await battlefieldRef.current.regenerateTerrain(terrainType);
+        console.log(`🔄 Regenerated terrain: ${terrainType}`);
+      } catch (error) {
+        console.error('❌ Failed to regenerate terrain:', error);
+      }
+    }
+  }, [terrainType]);
+
+  const toggleGrid = useCallback(() => {
+    if (battlefieldRef.current) {
+      battlefieldRef.current.updateConfig({ showGrid: !showGrid });
+      setShowGrid(!showGrid);
+    }
+  }, [showGrid]);
+
   // Manual mode functions
   const spawnPlayer = useCallback(() => {
     if (!battlefieldRef.current) return;
@@ -239,6 +262,58 @@ export const GridTestComponent: React.FC = () => {
         >
           🌐 Server Mode
         </button>
+      </div>
+
+      {/* Terrain Controls */}
+      <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+        <h3 style={{ color: 'white', marginBottom: '10px' }}>🌍 Terrain Controls</h3>
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <label style={{ color: 'white', fontSize: '14px' }}>Terrain:</label>
+            <select
+              value={terrainType}
+              onChange={(e) => setTerrainType(e.target.value as 'mixed' | 'terrain_flat')}
+              style={{
+                padding: '5px 10px',
+                borderRadius: '4px',
+                border: '1px solid #bdc3c7',
+                backgroundColor: 'white',
+                color: '#2c3e50'
+              }}
+            >
+              <option value="mixed">Mixed Terrain</option>
+              <option value="terrain_flat">Flat Terrain</option>
+            </select>
+          </div>
+          
+          <button
+            onClick={regenerateTerrain}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#27ae60',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            🔄 Regenerate
+          </button>
+          
+          <button
+            onClick={toggleGrid}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: showGrid ? '#3498db' : '#95a5a6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            📐 {showGrid ? 'Hide Grid' : 'Show Grid'}
+          </button>
+        </div>
       </div>
 
       {/* Connection Status */}

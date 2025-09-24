@@ -1,6 +1,8 @@
 import * as PIXI from 'pixi.js';
 import type { GridConfig, GridClickEvent, GridDimensions } from '../types/GridTypes';
 import type { GridPosition, Player, Boss, EntityInfo } from '../types/GameTypes';
+import { SpriteSheetManager } from '../assets/SpriteSheetManager';
+import { TerrainManager, type TerrainPattern } from './TerrainManager';
 
 export class GridBattlefield {
   private app: PIXI.Application;
@@ -16,6 +18,12 @@ export class GridBattlefield {
   private sideLabels: PIXI.Container;
   private background: PIXI.Graphics;
   private cells: PIXI.Graphics[][];
+  
+  // Terrain system
+  private spriteManager: SpriteSheetManager;
+  private terrainManager: TerrainManager;
+  private terrainLayer: PIXI.Container;
+  private terrainPattern: TerrainPattern | null = null;
 
   // Entity layers
   private playerLayer: PIXI.Container;
@@ -58,10 +66,15 @@ export class GridBattlefield {
     // Create main container
     this.container = new PIXI.Container();
 
+    // Initialize sprite and terrain managers
+    this.spriteManager = new SpriteSheetManager();
+    this.terrainManager = new TerrainManager(this.spriteManager);
+
     // Create visual elements
     this.background = new PIXI.Graphics();
     this.gridLines = new PIXI.Graphics();
     this.sideLabels = new PIXI.Container();
+    this.terrainLayer = new PIXI.Container();
 
     // Create entity layers
     this.playerLayer = new PIXI.Container();
@@ -70,6 +83,7 @@ export class GridBattlefield {
 
     // Add to container (order matters for rendering)
     this.container.addChild(this.background);
+    this.container.addChild(this.terrainLayer); // Terrain sprites below grid lines
     this.container.addChild(this.gridLines);
     this.container.addChild(this.sideLabels);
     this.container.addChild(this.playerLayer);
@@ -114,7 +128,7 @@ export class GridBattlefield {
 
       // Initialize grid
       console.log('🗂️ Initializing grid...');
-      this.initializeGrid();
+      await this.initializeGrid();
       console.log('✅ Grid initialized');
 
       // Setup interaction
@@ -165,11 +179,12 @@ export class GridBattlefield {
   /**
    * Initialize grid visual elements
    */
-  private initializeGrid(): void {
+  private async initializeGrid(): Promise<void> {
     // Clear existing elements
     this.background.clear();
     this.gridLines.clear();
     this.sideLabels.removeChildren();
+    this.terrainLayer.removeChildren();
     this.cells = [];
 
     const labelArea = this.getLabelArea();
@@ -178,7 +193,10 @@ export class GridBattlefield {
     this.background.fill({ color: this.config.backgroundColor });
     this.background.rect(0, 0, this.config.width, this.config.height);
 
-    // Draw grid cells
+    // Load and draw terrain sprites
+    await this.loadAndDrawTerrain(labelArea);
+
+    // Draw grid cells (now just for interaction, not visual)
     this.drawGridCells(labelArea);
 
     // Draw grid lines
@@ -193,7 +211,42 @@ export class GridBattlefield {
   }
 
   /**
-   * Draw grid cells
+   * Load terrain sprites and draw them
+   */
+  private async loadAndDrawTerrain(labelArea: { top: number; bottom: number; left: number; right: number }): Promise<void> {
+    try {
+      // Load terrain sprites
+      await this.terrainManager.loadTerrainSprites();
+      
+      // Generate terrain pattern
+      this.terrainPattern = this.terrainManager.generateRandomTerrain(
+        this.GRID_WIDTH, 
+        this.GRID_HEIGHT, 
+        'mixed' // TODO: Make this configurable
+      );
+      
+      // Create terrain sprites
+      const terrainSprites = this.terrainManager.createTerrainSprites(
+        this.terrainPattern, 
+        this.cellSize
+      );
+      
+      // Position terrain sprites accounting for label area
+      terrainSprites.forEach(sprite => {
+        sprite.x += labelArea.left;
+        sprite.y += labelArea.top;
+        this.terrainLayer.addChild(sprite);
+      });
+      
+      console.log(`✅ Loaded ${terrainSprites.length} terrain sprites`);
+    } catch (error) {
+      console.error('❌ Failed to load terrain sprites:', error);
+      // Fallback to solid color background
+    }
+  }
+
+  /**
+   * Draw grid cells (now just for interaction, not visual)
    */
   private drawGridCells(labelArea: { top: number; bottom: number; left: number; right: number }): void {
     for (let y = 0; y < this.GRID_HEIGHT; y++) {
@@ -367,10 +420,10 @@ export class GridBattlefield {
   /**
    * Update configuration
    */
-  updateConfig(newConfig: Partial<GridConfig>): void {
+  async updateConfig(newConfig: Partial<GridConfig>): Promise<void> {
     this.config = { ...this.config, ...newConfig };
     this.calculateCellSize();
-    this.initializeGrid();
+    await this.initializeGrid();
     this.setupInteraction();
     this.render();
   }
@@ -418,12 +471,12 @@ export class GridBattlefield {
   /**
    * Resize the battlefield
    */
-  resize(width: number, height: number): void {
+  async resize(width: number, height: number): Promise<void> {
     this.config.width = width;
     this.config.height = height;
     this.app.renderer.resize(width, height);
     this.calculateCellSize();
-    this.initializeGrid();
+    await this.initializeGrid();
     this.setupInteraction();
     this.render();
   }
@@ -820,6 +873,38 @@ export class GridBattlefield {
   }
 
   /**
+   * Regenerate terrain with new pattern
+   */
+  async regenerateTerrain(terrainType: string = 'mixed'): Promise<void> {
+    const labelArea = this.getLabelArea();
+    
+    // Clear existing terrain
+    this.terrainLayer.removeChildren();
+    
+    // Generate new terrain pattern
+    this.terrainPattern = this.terrainManager.generateRandomTerrain(
+      this.GRID_WIDTH, 
+      this.GRID_HEIGHT, 
+      terrainType
+    );
+    
+    // Create new terrain sprites
+    const terrainSprites = this.terrainManager.createTerrainSprites(
+      this.terrainPattern, 
+      this.cellSize
+    );
+    
+    // Position terrain sprites accounting for label area
+    terrainSprites.forEach(sprite => {
+      sprite.x += labelArea.left;
+      sprite.y += labelArea.top;
+      this.terrainLayer.addChild(sprite);
+    });
+    
+    console.log(`🔄 Regenerated terrain with ${terrainSprites.length} sprites`);
+  }
+
+  /**
    * Destroy the battlefield
    */
   destroy(): void {
@@ -828,6 +913,15 @@ export class GridBattlefield {
     try {
       // Clear all entities first
       this.clearAllEntities();
+
+      // Clean up terrain resources
+      if (this.terrainManager) {
+        this.terrainManager.destroy();
+      }
+      
+      if (this.spriteManager) {
+        this.spriteManager.destroyAll();
+      }
 
       // Remove canvas from DOM safely
       if (this.app.canvas && this.app.canvas.parentNode) {
