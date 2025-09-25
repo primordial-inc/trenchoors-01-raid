@@ -88,7 +88,31 @@ export class SocketManager {
       return;
     }
 
-    this.dummyInput.handleMoveCommand(playerId, direction);
+    // Get player's current position BEFORE the move
+    const playerBefore = this.gameState.getPlayer(playerId);
+    const oldPosition = playerBefore ? { ...playerBefore.position } : null;
+
+    console.log(`🎬 SERVER: Processing move ${direction} for player ${playerId}`);
+
+    // Process the move command  
+    const result = this.dummyInput.handleMoveCommand(playerId, direction);
+    
+    // Check if the move was successful by comparing positions
+    if (result && oldPosition) {
+      const playerAfter = this.gameState.getPlayer(playerId);
+      
+      if (playerAfter && (playerAfter.position.x !== oldPosition.x || playerAfter.position.y !== oldPosition.y)) {
+        console.log(`🎬 SERVER: Move successful! Broadcasting playerMoved event`);
+        console.log(`🎬 SERVER: ${oldPosition.x},${oldPosition.y} → ${playerAfter.position.x},${playerAfter.position.y}`);
+        
+        // 🔥 CRITICAL: Broadcast individual player moved event for animations
+        this.broadcastPlayerMoved(playerId, playerAfter.position);
+      } else {
+        console.log(`🎬 SERVER: Move failed or no position change`);
+      }
+    }
+
+    // Still broadcast full game state for overall sync
     this.broadcastGameState();
   }
 
@@ -99,7 +123,37 @@ export class SocketManager {
       return;
     }
 
-    this.dummyInput.handleAttackCommand(playerId);
+    console.log(`🎬 SERVER: Processing attack for player ${playerId}`);
+
+    // Get boss info before attack
+    const bossBefore = this.gameState.getBoss();
+    const healthBefore = bossBefore ? bossBefore.currentHealth : 0;
+
+    // Process the attack command
+    const result = this.dummyInput.handleAttackCommand(playerId);
+    
+    // Check if the attack was successful by seeing if boss took damage
+    if (result) {
+      const bossAfter = this.gameState.getBoss();
+      const healthAfter = bossAfter ? bossAfter.currentHealth : 0;
+      
+      if (healthBefore > healthAfter && bossAfter) {
+        console.log(`🎬 SERVER: Attack successful! Broadcasting playerAttacked event`);
+        console.log(`🎬 SERVER: Boss health: ${healthBefore} → ${healthAfter}`);
+        
+        // 🔥 CRITICAL: Broadcast individual player attacked event for animations
+        this.broadcastPlayerAttacked(playerId, {
+          target: 'boss',
+          targetId: bossAfter.id || 'boss', 
+          position: bossAfter.position,
+          damage: healthBefore - healthAfter
+        });
+      } else {
+        console.log(`🎬 SERVER: Attack failed or no damage dealt`);
+      }
+    }
+
+    // Still broadcast full game state for overall sync
     this.broadcastGameState();
   }
 
@@ -221,7 +275,21 @@ export class SocketManager {
   }
 
   public broadcastBossMechanic(mechanic: any): void {
+    console.log(`🔥 SERVER: Broadcasting boss mechanic:`, {
+      type: mechanic.type,
+      warningTime: mechanic.warningTime,
+      hasData: !!mechanic.data,
+      dataKeys: mechanic.data ? Object.keys(mechanic.data) : [],
+      connectedClients: this.getConnectedPlayerCount()
+    });
+    
+    if (mechanic.data) {
+      console.log(`🔥 SERVER: Mechanic data details:`, mechanic.data);
+    }
+    
     this.io.emit('bossMechanic', mechanic);
+    
+    console.log(`📡 SERVER: Boss mechanic broadcast sent to ${this.getConnectedPlayerCount()} clients`);
   }
 
   public broadcastGameStarted(): void {

@@ -110,10 +110,38 @@ app.post('/admin/config/tick-rate', (req: Request, res: Response) => {
 // Mechanic endpoints
 app.post('/admin/trigger-mechanic', (req: Request, res: Response) => {
   try {
-    gameEngine.triggerMechanic();
-    res.json({ success: true, message: 'Mechanic triggered' });
+    const { type } = req.body;
+    
+    if (!gameEngine.isGameRunning()) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Game is not running' 
+      });
+    }
+
+    const mechanic = gameEngine.triggerMechanic();
+    
+    if (mechanic) {
+      res.json({ 
+        success: true, 
+        message: `Triggered ${mechanic.getName()}`,
+        mechanic: {
+          id: mechanic.getId(),
+          type: mechanic.getType(),
+          name: mechanic.getName()
+        }
+      });
+    } else {
+      res.status(500).json({
+        success: false, 
+        message: 'Failed to trigger mechanic'
+      });
+    }
   } catch (error) {
-    res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+    res.status(500).json({ 
+      success: false, 
+      message: error instanceof Error ? error.message : 'Unknown error' 
+    });
   }
 });
 

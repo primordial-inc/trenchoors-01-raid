@@ -115,27 +115,64 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
         console.log('🚶 Player moved:', playerId, position);
         console.log('🎬 Battlefield ref available:', !!battlefieldRef.current);
         
-        // Update player position in current state
-        setGameState(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            players: prev.players.map(p => 
-              p.id === playerId 
-                ? { ...p, position: { x: position.x, y: position.y } }
-                : p
-            )
-          };
-        });
+        // 🔥 FIX: Don't update game state immediately if we're going to animate
+        // Instead, let the animation complete first, then update
         
-        // 🎬 NEW: Trigger smooth movement animation
         if (battlefieldRef.current) {
-          console.log('🎬 Calling movePlayerSmooth...');
-          battlefieldRef.current.movePlayerSmooth(playerId, { x: position.x, y: position.y });
+          console.log('🎬 Starting smooth movement animation...');
+          
+          // Start the smooth movement animation
+          battlefieldRef.current.movePlayerSmooth(playerId, { x: position.x, y: position.y })
+            .then(() => {
+              console.log('🎬 Smooth movement completed, updating game state');
+              
+              // 🔥 ONLY update game state AFTER animation completes
+              setGameState(prev => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  players: prev.players.map(p => 
+                    p.id === playerId 
+                      ? { ...p, position: { x: position.x, y: position.y } }
+                      : p
+                  )
+                };
+              });
+            })
+            .catch((error) => {
+              console.error('🎬 Smooth movement failed:', error);
+              
+              // Fallback: update game state immediately if animation fails
+              setGameState(prev => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  players: prev.players.map(p => 
+                    p.id === playerId 
+                      ? { ...p, position: { x: position.x, y: position.y } }
+                      : p
+                  )
+                };
+              });
+            });
         } else {
-          console.warn('🎬 Battlefield ref not available for animation');
+          console.warn('🎬 Battlefield ref not available, updating state immediately');
+          
+          // Fallback: update immediately if no battlefield reference
+          setGameState(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              players: prev.players.map(p => 
+                p.id === playerId 
+                  ? { ...p, position: { x: position.x, y: position.y } }
+                  : p
+              )
+            };
+          });
         }
       });
+
 
       socket.on('playerDied', (playerId: string) => {
         console.log('💀 Player died:', playerId);
@@ -321,6 +358,8 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
             break;
         }
       });
+
+      
 
 
       // Admin events
