@@ -40,6 +40,18 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
 
       socketRef.current = socket;
 
+      // Debug: Log all socket events
+      const originalEmit = socket.emit;
+      socket.emit = function(event: string, ...args: any[]) {
+        console.log(`📤 Socket emit: ${event}`, args);
+        return originalEmit.call(this, event, ...args);
+      };
+
+      // Debug: Log all incoming events
+      socket.onAny((event: string, ...args: any[]) => {
+        console.log(`📥 Socket received: ${event}`, args);
+      });
+
       // Connection events
       socket.on('connect', () => {
         console.log('✅ Connected to game server');
@@ -243,6 +255,73 @@ export function useGameState(serverUrl: string = 'http://localhost:3000'): UseGa
         console.log('🏁 Game ended:', result);
         setGameState(prev => prev ? { ...prev, status: 'finished' } : null);
       });
+
+      // Boss mechanic events
+      socket.on('bossMechanic', (mechanic: any) => {
+      console.log('⚡ Boss mechanic triggered:', mechanic);
+      console.log('🎬 Battlefield ref available for mechanic:', !!battlefieldRef.current);
+      console.log('📊 Full mechanic data structure:', JSON.stringify(mechanic, null, 2));
+        
+        if (!battlefieldRef.current) {
+          console.warn('⚠️ Battlefield ref not available for mechanic warning');
+          return;
+        }
+        
+        // Extract mechanic data from server format
+        const mechanicData = mechanic.data || {};
+        const warningDuration = mechanic.warningTime || 4000;
+        
+        switch (mechanic.type) {
+          case 'meteor_strike':
+            // Server sends mechanic.data.targets (array of positions)
+            const targets = mechanicData.targets || [];
+            console.log('🚀 Showing meteor strike warning:', targets);
+            
+            // Safety check: only show warning if we have valid targets
+            if (targets.length > 0 && targets.every((target: any) => target && typeof target.x === 'number' && typeof target.y === 'number')) {
+              battlefieldRef.current.showMeteorWarning(targets, warningDuration);
+            } else {
+              console.warn('⚠️ Invalid meteor targets received:', targets);
+              return;
+            }
+            
+            // Auto-trigger activation after warning duration
+            setTimeout(() => {
+              console.log('💥 Auto-activating meteor strike:', targets);
+              battlefieldRef.current?.activateMeteorStrike(targets);
+            }, warningDuration);
+            break;
+            
+          case 'lava_wave':
+            // Server sends mechanic.data.direction and mechanic.data.rowOrColumn
+            const { direction, rowOrColumn } = mechanicData;
+            console.log('🌊 Showing lava wave warning:', { direction, rowOrColumn });
+            
+            // Safety check: ensure we have valid direction and position
+            if (!direction || typeof rowOrColumn !== 'number') {
+              console.warn('⚠️ Invalid lava wave data received:', { direction, rowOrColumn });
+              return;
+            }
+            
+            if (direction === 'vertical' && rowOrColumn !== undefined) {
+              battlefieldRef.current.showLavaWaveWarning(rowOrColumn, warningDuration);
+              // Auto-trigger activation after warning duration
+              setTimeout(() => {
+                console.log('🌊 Auto-activating lava wave column:', rowOrColumn);
+                battlefieldRef.current?.activateLavaWave(rowOrColumn);
+              }, warningDuration);
+            } else if (direction === 'horizontal' && rowOrColumn !== undefined) {
+              battlefieldRef.current.showLavaWaveWarningRow(rowOrColumn, warningDuration);
+              // Auto-trigger activation after warning duration
+              setTimeout(() => {
+                console.log('🌊 Auto-activating lava wave row:', rowOrColumn);
+                battlefieldRef.current?.activateLavaWave(undefined, rowOrColumn);
+              }, warningDuration);
+            }
+            break;
+        }
+      });
+
 
       // Admin events
       socket.on('adminMessage', (message: string) => {

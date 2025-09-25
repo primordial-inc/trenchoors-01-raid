@@ -158,7 +158,7 @@ class PlayerCLI {
           break;
 
         case 'join':
-          if (args.length > 0) {
+          if (args.length > 0 && args[0]) {
             await this.joinGame(args[0]);
           } else {
             console.log('❌ Please provide a player name (e.g., join Player1)');
@@ -170,7 +170,7 @@ class PlayerCLI {
           break;
 
         case 'move':
-          if (args.length > 0) {
+          if (args.length > 0 && args[0]) {
             await this.movePlayer(args[0]);
           } else {
             console.log('❌ Please provide a direction (up, down, left, right)');

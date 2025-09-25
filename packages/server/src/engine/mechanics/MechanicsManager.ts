@@ -21,7 +21,7 @@ export class MechanicsManager {
   private activeMechanics: Map<string, BaseBossMechanic> = new Map();
   private mechanicTypes: BaseBossMechanic[] = [];
   private config: MechanicsConfig;
-  private lastMechanicTime: Date = new Date();
+  private lastMechanicTime: Date = new Date(Date.now() - 20000); // 20 seconds ago to allow immediate triggering
   private bossPhase: number = 1;
 
   constructor(config: MechanicsConfig = DEFAULT_MECHANICS_CONFIG) {
@@ -56,17 +56,26 @@ export class MechanicsManager {
       default: interval = this.config.phase1Interval;
     }
 
-    return timeSinceLastMechanic >= interval && 
+    const shouldTrigger = timeSinceLastMechanic >= interval && 
            this.activeMechanics.size < this.config.maxConcurrentMechanics;
+    
+    console.log(`🔍 Mechanic check: timeSince=${timeSinceLastMechanic}ms, interval=${interval}ms, active=${this.activeMechanics.size}, shouldTrigger=${shouldTrigger}`);
+    
+    return shouldTrigger;
   }
 
   public triggerRandomMechanic(): BaseBossMechanic | null {
-    if (!this.shouldTriggerMechanic()) return null;
+    if (!this.shouldTriggerMechanic()) {
+      console.log(`❌ Not triggering mechanic - conditions not met`);
+      return null;
+    }
 
     // Filter out mechanics that are already active
     const availableMechanics = this.mechanicTypes.filter(mechanic => 
       !Array.from(this.activeMechanics.values()).some(active => active.getType() === mechanic.getType())
     );
+
+    console.log(`🎯 Available mechanics: ${availableMechanics.length}, Total types: ${this.mechanicTypes.length}`);
 
     if (availableMechanics.length === 0) return null;
 
@@ -158,6 +167,45 @@ export class MechanicsManager {
 
   public getMechanicCount(): number {
     return this.activeMechanics.size;
+  }
+
+  public forceTriggerRandomMechanic(): BaseBossMechanic | null {
+    console.log('🚀 Force triggering mechanic - bypassing all checks');
+    
+    // Filter out mechanics that are already active
+    const availableMechanics = this.mechanicTypes.filter(mechanic => 
+      !Array.from(this.activeMechanics.values()).some(active => active.getType() === mechanic.getType())
+    );
+
+    console.log(`🎯 Force - Available mechanics: ${availableMechanics.length}, Total types: ${this.mechanicTypes.length}`);
+
+    if (availableMechanics.length === 0) {
+      console.log('❌ No available mechanics for force trigger');
+      return null;
+    }
+
+    // Choose random mechanic
+    const randomIndex = Math.floor(Math.random() * availableMechanics.length);
+    const selectedMechanic = availableMechanics[randomIndex];
+    
+    if (!selectedMechanic) {
+      console.log('❌ No mechanic selected for force trigger');
+      return null;
+    }
+    
+    console.log(`🎲 Force selected mechanic: ${selectedMechanic.getType()}`);
+    
+    // Activate the mechanic (this generates the data)
+    const result = selectedMechanic.activate();
+    console.log(`🎯 Mechanic activation result:`, result);
+    
+    // Add to active mechanics
+    this.activeMechanics.set(selectedMechanic.getType(), selectedMechanic);
+    this.lastMechanicTime = new Date();
+    
+    console.log(`✅ Force activated mechanic: ${selectedMechanic.getType()}`);
+    
+    return selectedMechanic;
   }
 
   public serialize(): any {

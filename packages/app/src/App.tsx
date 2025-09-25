@@ -4,7 +4,7 @@ import './App.css'
 function App() {
   return (
     <div style={{ padding: '20px', backgroundColor: '#34495e', minHeight: '100vh' }}>
-      <h1 style={{ color: 'white', textAlign: 'center' }}>🌍 Grid Battlefield with Terrain Sprites</h1>
+      <h1 style={{ color: 'white', textAlign: 'center' }}>🌍 Grid Battlefield with Boss Mechanics</h1>
       <GridTestComponent />
     </div>
   )

@@ -180,16 +180,28 @@ export class GameEngine {
 
   private processBossMechanics(): void {
     const boss = this.gameState.getBoss();
-    if (!boss || !boss.isAlive) return;
+    if (!boss || !boss.isAlive) {
+      console.log('🔍 Boss mechanics check: No boss or boss not alive');
+      return;
+    }
+
+    console.log(`🔍 Boss mechanics check: Boss phase ${this.mechanicsManager.getBossPhase()}, Active mechanics: ${this.mechanicsManager.getMechanicCount()}`);
 
     // Update existing mechanics
     this.mechanicsManager.updateMechanics();
 
     // Check if we should trigger a new mechanic
     if (this.mechanicsManager.shouldTriggerMechanic()) {
+      console.log('⚡ Triggering new mechanic...');
       const newMechanic = this.mechanicsManager.triggerRandomMechanic();
       if (newMechanic) {
-        console.log(`Boss mechanic triggered: ${newMechanic.getName()}`);
+        console.log(`🎯 Boss mechanic triggered: ${newMechanic.getName()}`);
+        console.log(`📡 Broadcasting mechanic data:`, {
+          id: newMechanic.getId(),
+          type: newMechanic.getType(),
+          warningTime: newMechanic.getWarningTimeRemaining(),
+          data: newMechanic.serialize().data
+        });
         
         // Broadcast mechanic warning
         this.socketManager?.broadcastAdminMessage(newMechanic.getWarningMessage());
@@ -204,7 +216,11 @@ export class GameEngine {
           duration: newMechanic.getTimeRemaining(),
           data: newMechanic.serialize().data
         });
+      } else {
+        console.log('❌ Failed to create new mechanic');
       }
+    } else {
+      console.log('⏳ Not time for new mechanic yet');
     }
   }
 
@@ -323,6 +339,45 @@ export class GameEngine {
     return this.mechanicsManager;
   }
 
+  public triggerMechanic() {
+    const boss = this.gameState.getBoss();
+    if (!boss || !boss.isAlive) {
+      console.log('❌ Cannot trigger mechanic: No boss or boss not alive');
+      return null;
+    }
+
+    console.log('🎯 Manually triggering mechanic...');
+    const newMechanic = this.mechanicsManager.triggerRandomMechanic();
+    if (newMechanic) {
+      console.log(`🎯 Manual mechanic triggered: ${newMechanic.getName()}`);
+      console.log(`📡 Broadcasting mechanic data:`, {
+        id: newMechanic.getId(),
+        type: newMechanic.getType(),
+        warningTime: newMechanic.getWarningTimeRemaining(),
+        data: newMechanic.serialize().data
+      });
+      
+      // Broadcast mechanic warning
+      this.socketManager?.broadcastAdminMessage(newMechanic.getWarningMessage());
+      
+      // Broadcast mechanic data to clients
+      this.socketManager?.broadcastBossMechanic({
+        id: newMechanic.getId(),
+        type: newMechanic.getType(),
+        name: newMechanic.getName(),
+        description: newMechanic.getDescription(),
+        warningTime: newMechanic.getWarningTimeRemaining(),
+        duration: newMechanic.getTimeRemaining(),
+        data: newMechanic.serialize().data
+      });
+      
+      return newMechanic;
+    } else {
+      console.log('❌ Failed to create manual mechanic');
+      return null;
+    }
+  }
+
   // Configuration updates
   public updateTickRate(newTickRate: number): void {
     if (newTickRate < 100 || newTickRate > 5000) {
@@ -343,5 +398,25 @@ export class GameEngine {
     }
 
     this.config.maxPlayers = newMaxPlayers;
+  }
+
+  public forceTriggerMechanic(): void {
+    console.log('🚀 Force triggering mechanic (bypassing all checks)...');
+    const mechanic = this.mechanicsManager.forceTriggerRandomMechanic();
+    if (mechanic) {
+      console.log(`✅ Force triggered mechanic: ${mechanic.getType()}`);
+      // Broadcast mechanic data to clients
+      this.socketManager?.broadcastBossMechanic({
+        id: mechanic.getId(),
+        type: mechanic.getType(),
+        name: mechanic.getName(),
+        description: mechanic.getDescription(),
+        warningTime: mechanic.getWarningTimeRemaining(),
+        duration: mechanic.getTimeRemaining(),
+        data: mechanic.serialize().data
+      });
+    } else {
+      console.log('❌ Failed to force trigger mechanic');
+    }
   }
 }

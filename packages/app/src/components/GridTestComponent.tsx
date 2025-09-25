@@ -33,6 +33,9 @@ export const GridTestComponent: React.FC = () => {
   const [, setManualPlayers] = useState<Map<string, { position: GridPosition; color: string; name: string; isAlive: boolean }>>(new Map());
   const [manualBoss, setManualBoss] = useState<{ position: GridPosition; health: number; maxHealth: number; phase: number; isAlive: boolean } | null>(null);
   const [playerCounter, setPlayerCounter] = useState(1);
+  
+  // Mechanic system state
+  const [activeWarnings, setActiveWarnings] = useState<string[]>([]);
 
   // Cleanup function
   const cleanup = useCallback(() => {
@@ -174,6 +177,7 @@ export const GridTestComponent: React.FC = () => {
   // Monitor sprite loading status and set battlefield reference
   useEffect(() => {
     if (battlefieldRef.current && isLoaded) {
+      console.log('🎬 Setting battlefield reference for server events');
       // Set battlefield reference for animation triggers
       setBattlefieldRef(battlefieldRef.current);
       
@@ -190,6 +194,14 @@ export const GridTestComponent: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [isLoaded, setBattlefieldRef]);
+
+  // Additional effect to ensure battlefield ref is set when mode changes to server
+  useEffect(() => {
+    if (mode === 'server' && battlefieldRef.current && isLoaded) {
+      console.log('🌐 Server mode: Ensuring battlefield reference is set');
+      setBattlefieldRef(battlefieldRef.current);
+    }
+  }, [mode, isLoaded, setBattlefieldRef]);
 
   // Terrain control functions
   const regenerateTerrain = useCallback(async () => {
@@ -261,6 +273,71 @@ export const GridTestComponent: React.FC = () => {
     
     setManualBoss(prev => prev ? { ...prev, health: newHealth, phase: newPhase, isAlive: newHealth > 0 } : null);
   }, [manualBoss]);
+
+  // Mechanic testing functions
+  const testMeteorStrike = useCallback(() => {
+    if (!battlefieldRef.current) return;
+    
+    // Create 2x2 meteor impact zones around a random position
+    const centerX = Math.floor(Math.random() * 14) + 1; // Avoid edges
+    const centerY = Math.floor(Math.random() * 10) + 1;
+    
+    const impactZones: GridPosition[] = [
+      { x: centerX, y: centerY },
+      { x: centerX + 1, y: centerY },
+      { x: centerX, y: centerY + 1 },
+      { x: centerX + 1, y: centerY + 1 }
+    ];
+    
+    const warningId = battlefieldRef.current.showMeteorWarning(impactZones, 4000);
+    setActiveWarnings(prev => [...prev, warningId]);
+    console.log(`⚡ Meteor strike warning created: ${warningId} at (${centerX}, ${centerY})`);
+    
+    // Simulate activation after 4 seconds
+    setTimeout(() => {
+      battlefieldRef.current?.activateMeteorStrike(impactZones);
+      setActiveWarnings(prev => prev.filter(id => id !== warningId));
+    }, 4000);
+  }, []);
+
+  const testLavaWaveColumn = useCallback(() => {
+    if (!battlefieldRef.current) return;
+    
+    const column = Math.floor(Math.random() * 16);
+    const warningId = battlefieldRef.current.showLavaWaveWarning(column, 5000);
+    setActiveWarnings(prev => [...prev, warningId]);
+    console.log(`🌊 Lava wave column warning created: ${warningId} for column ${column}`);
+    
+    // Simulate activation after 5 seconds
+    setTimeout(() => {
+      battlefieldRef.current?.activateLavaWave(column);
+      setActiveWarnings(prev => prev.filter(id => id !== warningId));
+    }, 5000);
+  }, []);
+
+  const testLavaWaveRow = useCallback(() => {
+    if (!battlefieldRef.current) return;
+    
+    const row = Math.floor(Math.random() * 12);
+    const warningId = battlefieldRef.current.showLavaWaveWarningRow(row, 5000);
+    setActiveWarnings(prev => [...prev, warningId]);
+    console.log(`🌊 Lava wave row warning created: ${warningId} for row ${row}`);
+    
+    // Simulate activation after 5 seconds
+    setTimeout(() => {
+      battlefieldRef.current?.activateLavaWave(undefined, row);
+      setActiveWarnings(prev => prev.filter(id => id !== warningId));
+    }, 5000);
+  }, []);
+
+  const clearAllMechanics = useCallback(() => {
+    if (!battlefieldRef.current) return;
+    
+    battlefieldRef.current.clearAllMechanicWarnings();
+    battlefieldRef.current.clearAllMechanicEffects();
+    setActiveWarnings([]);
+    console.log('🗑️ Cleared all mechanic warnings and effects');
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px' }}>
@@ -357,6 +434,53 @@ export const GridTestComponent: React.FC = () => {
             Status: {connectionStatus}
           </div>
           {error && <div style={{ color: '#e74c3c', marginTop: '5px' }}>Error: {error}</div>}
+          
+          {/* Debug Info */}
+          <div style={{ 
+            marginTop: '10px', 
+            fontSize: '12px', 
+            color: '#95a5a6',
+            backgroundColor: '#2c3e50',
+            padding: '8px',
+            borderRadius: '4px'
+          }}>
+            <div>Battlefield Loaded: {isLoaded ? '✅' : '❌'}</div>
+            <div>Battlefield Ref: {battlefieldRef.current ? '✅' : '❌'}</div>
+            <div>Sprites Loaded: {spritesLoaded ? '✅' : '❌'}</div>
+            
+            {/* Debug Test Button */}
+            {battlefieldRef.current && (
+              <button 
+                onClick={() => {
+                  console.log('🧪 Testing mechanic directly on battlefield');
+                  const centerX = 8;
+                  const centerY = 6;
+                  const impactZones = [
+                    { x: centerX, y: centerY },
+                    { x: centerX + 1, y: centerY },
+                    { x: centerX, y: centerY + 1 },
+                    { x: centerX + 1, y: centerY + 1 }
+                  ];
+                  battlefieldRef.current?.showMeteorWarning(impactZones, 3000);
+                  setTimeout(() => {
+                    battlefieldRef.current?.activateMeteorStrike(impactZones);
+                  }, 3000);
+                }}
+                style={{
+                  marginTop: '8px',
+                  padding: '4px 8px',
+                  backgroundColor: '#e74c3c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontSize: '10px'
+                }}
+              >
+                🧪 Test Mechanic
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -402,60 +526,138 @@ export const GridTestComponent: React.FC = () => {
           {/* Manual Mode Controls */}
           {mode === 'manual' && (
             <div style={{ marginTop: '20px', textAlign: 'center' }}>
-              <h3 style={{ color: 'white', marginBottom: '10px' }}>Manual Controls</h3>
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button 
-                  onClick={spawnPlayer} 
-                  disabled={!spritesLoaded}
-                  style={{ 
-                    padding: '8px 16px', 
-                    backgroundColor: spritesLoaded ? '#27ae60' : '#95a5a6', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '4px', 
-                    cursor: spritesLoaded ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  👤 Spawn Player
-                </button>
-                <button 
-                  onClick={spawnBoss} 
-                  disabled={!spritesLoaded}
-                  style={{ 
-                    padding: '8px 16px', 
-                    backgroundColor: spritesLoaded ? '#e74c3c' : '#95a5a6', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '4px', 
-                    cursor: spritesLoaded ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  👹 Spawn Boss
-                </button>
-                <button onClick={damageBoss} disabled={!manualBoss} style={{ padding: '8px 16px', backgroundColor: manualBoss ? '#f39c12' : '#7f8c8d', color: 'white', border: 'none', borderRadius: '4px', cursor: manualBoss ? 'pointer' : 'not-allowed' }}>
-                  ⚔️ Damage Boss (-20)
-                </button>
-                <button onClick={clearAllEntities} style={{ padding: '8px 16px', backgroundColor: '#95a5a6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-                  🗑️ Clear All
-                </button>
-                <button 
-                  onClick={() => {
-                    // Test animation system
-                    if (battlefieldRef.current) {
-                      const playerIds = battlefieldRef.current.getPlayerIds();
-                      if (playerIds.length > 0) {
-                        const playerId = playerIds[0];
-                        console.log('🧪 Testing attack animation for:', playerId);
-                        battlefieldRef.current.triggerPlayerAttack(playerId);
-                      } else {
-                        console.log('🧪 No players found to test animation');
+              <h3 style={{ color: 'white', marginBottom: '10px' }}>🎮 Manual Controls</h3>
+              
+              {/* Entity Controls */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ color: '#f39c12', marginBottom: '10px' }}>👥 Entity Management</h4>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button 
+                    onClick={spawnPlayer} 
+                    disabled={!spritesLoaded}
+                    style={{ 
+                      padding: '8px 16px', 
+                      backgroundColor: spritesLoaded ? '#27ae60' : '#95a5a6', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      cursor: spritesLoaded ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    👤 Spawn Player
+                  </button>
+                  <button 
+                    onClick={spawnBoss} 
+                    disabled={!spritesLoaded}
+                    style={{ 
+                      padding: '8px 16px', 
+                      backgroundColor: spritesLoaded ? '#e74c3c' : '#95a5a6', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      cursor: spritesLoaded ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    👹 Spawn Boss
+                  </button>
+                  <button onClick={damageBoss} disabled={!manualBoss} style={{ padding: '8px 16px', backgroundColor: manualBoss ? '#f39c12' : '#7f8c8d', color: 'white', border: 'none', borderRadius: '4px', cursor: manualBoss ? 'pointer' : 'not-allowed' }}>
+                    ⚔️ Damage Boss (-20)
+                  </button>
+                  <button onClick={clearAllEntities} style={{ padding: '8px 16px', backgroundColor: '#95a5a6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                    🗑️ Clear All Entities
+                  </button>
+                  <button 
+                    onClick={() => {
+                      // Test animation system
+                      if (battlefieldRef.current) {
+                        const playerIds = battlefieldRef.current.getPlayerIds();
+                        if (playerIds.length > 0) {
+                          const playerId = playerIds[0];
+                          console.log('🧪 Testing attack animation for:', playerId);
+                          battlefieldRef.current.triggerPlayerAttack(playerId);
+                        } else {
+                          console.log('🧪 No players found to test animation');
+                        }
                       }
-                    }
-                  }}
-                  style={{ padding: '8px 16px', backgroundColor: '#9b59b6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  🧪 Test Attack
-                </button>
+                    }}
+                    style={{ padding: '8px 16px', backgroundColor: '#9b59b6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    🧪 Test Attack
+                  </button>
+                </div>
+              </div>
+
+              {/* Mechanic Controls */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ color: '#e74c3c', marginBottom: '10px' }}>⚡ Boss Mechanics</h4>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button 
+                    onClick={testMeteorStrike}
+                    style={{ 
+                      padding: '8px 16px', 
+                      backgroundColor: '#e74c3c', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🚀 Meteor Strike (4s)
+                  </button>
+                  <button 
+                    onClick={testLavaWaveColumn}
+                    style={{ 
+                      padding: '8px 16px', 
+                      backgroundColor: '#ff8800', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🌊 Lava Column (5s)
+                  </button>
+                  <button 
+                    onClick={testLavaWaveRow}
+                    style={{ 
+                      padding: '8px 16px', 
+                      backgroundColor: '#ff6600', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🌊 Lava Row (5s)
+                  </button>
+                  <button 
+                    onClick={clearAllMechanics}
+                    style={{ 
+                      padding: '8px 16px', 
+                      backgroundColor: '#95a5a6', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🗑️ Clear Mechanics
+                  </button>
+                </div>
+                
+                {/* Active Warnings Status */}
+                {activeWarnings.length > 0 && (
+                  <div style={{ 
+                    marginTop: '10px', 
+                    padding: '8px 16px', 
+                    backgroundColor: '#f39c12', 
+                    color: 'white', 
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}>
+                    ⚠️ Active Warnings: {activeWarnings.length}
+                  </div>
+                )}
               </div>
             </div>
           )}

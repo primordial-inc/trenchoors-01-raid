@@ -7,6 +7,8 @@ import { SpriteEntityManager } from './SpriteEntityManager';
 import { SpriteAnimationController } from './SpriteAnimationController';
 import { AnimationStateManager } from './AnimationStateManager';
 import { MovementTweener } from './MovementTweener';
+import { MechanicWarningSystem } from './MechanicWarningSystem';
+import { MechanicEffects } from './MechanicEffects';
 
 export class GridBattlefield {
   private app: PIXI.Application;
@@ -38,6 +40,13 @@ export class GridBattlefield {
   private playerLayer: PIXI.Container;
   private bossLayer: PIXI.Container;
   private uiLayer: PIXI.Container;
+
+  // Mechanic systems
+  private mechanicWarningSystem: MechanicWarningSystem | null = null;
+  private mechanicEffects: MechanicEffects | null = null;
+  private mechanicWarningLayer: PIXI.Container;
+  private mechanicCountdownLayer: PIXI.Container;
+  private mechanicEffectsLayer: PIXI.Container;
 
   // Entity management (now using animated sprites)
   private players = new Map<string, PIXI.AnimatedSprite>();
@@ -96,13 +105,21 @@ export class GridBattlefield {
     this.bossLayer = new PIXI.Container();
     this.uiLayer = new PIXI.Container();
 
+    // Create mechanic layers
+    this.mechanicWarningLayer = new PIXI.Container();
+    this.mechanicCountdownLayer = new PIXI.Container();
+    this.mechanicEffectsLayer = new PIXI.Container();
+
     // Add to container (order matters for rendering)
     this.container.addChild(this.background);
     this.container.addChild(this.terrainLayer); // Terrain sprites below grid lines
     this.container.addChild(this.gridLines);
     this.container.addChild(this.sideLabels);
+    this.container.addChild(this.mechanicWarningLayer); // Warnings below entities
     this.container.addChild(this.playerLayer);
     this.container.addChild(this.bossLayer);
+    this.container.addChild(this.mechanicEffectsLayer); // Effects above entities
+    this.container.addChild(this.mechanicCountdownLayer); // Countdown above entities
     this.container.addChild(this.uiLayer);
   }
 
@@ -150,6 +167,11 @@ export class GridBattlefield {
       console.log('🖱️ Setting up interaction...');
       this.setupInteraction();
       console.log('✅ Interaction setup complete');
+
+      // Initialize mechanic systems
+      console.log('⚡ Initializing mechanic systems...');
+      this.initializeMechanicSystems();
+      console.log('✅ Mechanic systems initialized');
 
       // Render initial state
       console.log('🎨 Rendering initial state...');
@@ -1014,6 +1036,151 @@ export class GridBattlefield {
   }
 
   /**
+   * Initialize mechanic systems
+   */
+  private initializeMechanicSystems(): void {
+    const labelArea = this.getLabelArea();
+    
+    // Initialize mechanic warning system
+    this.mechanicWarningSystem = new MechanicWarningSystem(
+      this.mechanicWarningLayer,
+      this.mechanicCountdownLayer,
+      this.cellSize,
+      labelArea
+    );
+    
+    // Initialize mechanic effects system
+    this.mechanicEffects = new MechanicEffects(
+      this.mechanicEffectsLayer,
+      this.cellSize,
+      labelArea
+    );
+  }
+
+  /**
+   * Show meteor warning
+   */
+  showMeteorWarning(impactZones: GridPosition[], warningDuration: number): string {
+    if (!this.mechanicWarningSystem) {
+      console.warn('Mechanic warning system not initialized');
+      return '';
+    }
+    
+    return this.mechanicWarningSystem.addMeteorWarning(impactZones, warningDuration);
+  }
+
+  /**
+   * Show lava wave warning (column)
+   */
+  showLavaWaveWarning(column: number, warningDuration: number): string {
+    if (!this.mechanicWarningSystem) {
+      console.warn('Mechanic warning system not initialized');
+      return '';
+    }
+    
+    return this.mechanicWarningSystem.addLavaWaveWarning(column, warningDuration);
+  }
+
+  /**
+   * Show lava wave warning (row)
+   */
+  showLavaWaveWarningRow(row: number, warningDuration: number): string {
+    if (!this.mechanicWarningSystem) {
+      console.warn('Mechanic warning system not initialized');
+      return '';
+    }
+    
+    return this.mechanicWarningSystem.addLavaWaveWarningRow(row, warningDuration);
+  }
+
+  /**
+   * Activate meteor strike
+   */
+  activateMeteorStrike(impactZones: GridPosition[]): void {
+    if (!this.mechanicEffects) {
+      console.warn('Mechanic effects system not initialized');
+      return;
+    }
+    
+    // Create explosion effects for each impact zone
+    impactZones.forEach(position => {
+      this.mechanicEffects!.createMeteorExplosion(position);
+    });
+    
+    console.log(`💥 Activated meteor strike on ${impactZones.length} zones`);
+  }
+
+  /**
+   * Activate lava wave
+   */
+  activateLavaWave(column?: number, row?: number): void {
+    if (!this.mechanicEffects) {
+      console.warn('Mechanic effects system not initialized');
+      return;
+    }
+    
+    if (column !== undefined) {
+      // Vertical lava wave
+      this.mechanicEffects.createLavaWaveFlow(column, 'vertical');
+      console.log(`🌊 Activated lava wave on column ${column}`);
+    } else if (row !== undefined) {
+      // Horizontal lava wave
+      this.mechanicEffects.createLavaWaveFlow(row, 'horizontal');
+      console.log(`🌊 Activated lava wave on row ${row}`);
+    }
+  }
+
+  /**
+   * Clear mechanic warning
+   */
+  clearMechanicWarning(warningId: string): void {
+    if (!this.mechanicWarningSystem) {
+      console.warn('Mechanic warning system not initialized');
+      return;
+    }
+    
+    this.mechanicWarningSystem.removeWarning(warningId);
+  }
+
+  /**
+   * Clear all mechanic warnings
+   */
+  clearAllMechanicWarnings(): void {
+    if (!this.mechanicWarningSystem) {
+      console.warn('Mechanic warning system not initialized');
+      return;
+    }
+    
+    this.mechanicWarningSystem.clearAllWarnings();
+  }
+
+  /**
+   * Clear all mechanic effects
+   */
+  clearAllMechanicEffects(): void {
+    if (!this.mechanicEffects) {
+      console.warn('Mechanic effects system not initialized');
+      return;
+    }
+    
+    this.mechanicEffects.clearAllEffects();
+  }
+
+  /**
+   * Get active mechanic warning count
+   */
+  getActiveMechanicWarningCount(): number {
+    return this.mechanicWarningSystem?.getActiveWarningCount() || 0;
+  }
+
+  /**
+   * Get active mechanic effect count
+   */
+  getActiveMechanicEffectCount(): number {
+    return this.mechanicEffects?.getActiveEffectCount() || 0;
+  }
+
+  /**
    * Destroy the battlefield
    */
   destroy(): void {
@@ -1022,6 +1189,17 @@ export class GridBattlefield {
     try {
       // Clear all entities first
       this.clearAllEntities();
+
+      // Clean up mechanic systems
+      if (this.mechanicWarningSystem) {
+        this.mechanicWarningSystem.destroy();
+        this.mechanicWarningSystem = null;
+      }
+      
+      if (this.mechanicEffects) {
+        this.mechanicEffects.destroy();
+        this.mechanicEffects = null;
+      }
 
       // Clean up terrain resources
       if (this.terrainManager) {

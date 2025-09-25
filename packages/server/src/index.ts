@@ -107,6 +107,25 @@ app.post('/admin/config/tick-rate', (req: Request, res: Response) => {
   }
 });
 
+// Mechanic endpoints
+app.post('/admin/trigger-mechanic', (req: Request, res: Response) => {
+  try {
+    gameEngine.triggerMechanic();
+    res.json({ success: true, message: 'Mechanic triggered' });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+app.post('/admin/force-trigger-mechanic', (req: Request, res: Response) => {
+  try {
+    gameEngine.forceTriggerMechanic();
+    res.json({ success: true, message: 'Mechanic force triggered' });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
 	console.log(`Server running on port ${PORT}`);

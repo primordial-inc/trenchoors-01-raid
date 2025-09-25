@@ -109,8 +109,17 @@ class AdminCLI {
           this.showMechanics();
           break;
 
+        case 'trigger-mechanic':
+        case 'tm':
+          await this.triggerMechanic();
+          break;
+        case 'force-trigger-mechanic':
+        case 'ftm':
+          await this.forceTriggerMechanic();
+          break;
+
         case 'tickrate':
-          if (args.length > 0) {
+          if (args.length > 0 && args[0]) {
             await this.setTickRate(parseInt(args[0]));
           } else {
             console.log('❌ Please provide a tick rate value (e.g., tickrate 1000)');
@@ -236,6 +245,36 @@ class AdminCLI {
     }
   }
 
+  private async triggerMechanic(): Promise<void> {
+    try {
+      const response = await axios.post(`${this.baseUrl}/admin/trigger-mechanic`);
+      if (response.data.success) {
+        console.log('⚡ Mechanic triggered successfully!');
+        await this.updateGameState();
+        this.showMechanics();
+      } else {
+        console.log('❌ Failed to trigger mechanic:', response.data.message);
+      }
+    } catch (error) {
+      console.error('❌ Error triggering mechanic:', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
+  private async forceTriggerMechanic(): Promise<void> {
+    try {
+      const response = await axios.post(`${this.baseUrl}/admin/force-trigger-mechanic`);
+      if (response.data.success) {
+        console.log('🚀 Force mechanic triggered successfully!');
+        await this.updateGameState();
+        this.showMechanics();
+      } else {
+        console.log('❌ Failed to force trigger mechanic:', response.data.message);
+      }
+    } catch (error) {
+      console.error('❌ Error force triggering mechanic:', error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+
   private showStatus(): void {
     if (!this.gameState) {
       console.log('❌ No game state available');
@@ -352,6 +391,8 @@ class AdminCLI {
     console.log('players (p) - Show all players');
     console.log('boss (b) - Show boss information');
     console.log('mechanics (m) - Show active mechanics');
+    console.log('trigger-mechanic (tm) - Manually trigger a boss mechanic');
+    console.log('force-trigger-mechanic (ftm) - Force trigger mechanic (bypasses checks)');
     console.log('tickrate <ms> - Set tick rate (e.g., tickrate 1000)');
     console.log('clear - Clear screen');
     console.log('help (h) - Show this help');
